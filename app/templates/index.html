@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>南科大高等数学数字人教学工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #34495e;
+            font-weight: bold;
+        }
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        select, input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            display: none;
+        }
+        .result-section.show {
+            display: block;
+        }
+        .result-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        .step-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        .step-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+        .step-content {
+            color: #555;
+            line-height: 1.6;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            display: none;
+        }
+        .loading.show {
+            display: block;
+        }
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: none;
+        }
+        .error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 南科大高等数学数字人教学工具</h1>
+        <p class="subtitle">AI 解题 + 自动生成讲解课件</p>
+        
+        <form id="problemForm">
+            <div class="form-group">
+                <label for="problemText">题目内容（支持 Markdown/LaTeX）：</label>
+                <textarea id="problemText" name="problemText" placeholder="请输入高等数学题目，例如：&#10;求极限：$$\lim_{x \to 0} \frac{\sin x}{x}$$" required></textarea>
+            </div>
+            
+            <div class="row">
+                <div class="form-group">
+                    <label for="topic">题型：</label>
+                    <select id="topic" name="topic">
+                        <option value="">请选择（可选）</option>
+                        <option value="极限">极限</option>
+                        <option value="导数">导数</option>
+                        <option value="积分">积分</option>
+                        <option value="级数">级数</option>
+                        <option value="微分方程">微分方程</option>
+                        <option value="多元函数">多元函数</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="difficulty">难度：</label>
+                    <select id="difficulty" name="difficulty">
+                        <option value="">请选择（可选）</option>
+                        <option value="简单">简单</option>
+                        <option value="中等">中等</option>
+                        <option value="困难">困难</option>
+                    </select>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn" id="submitBtn">🚀 一键生成课件</button>
+        </form>
+        
+        <div class="loading" id="loading">
+            <p>⏳ 正在处理中，请稍候...</p>
+        </div>
+        
+        <div class="error" id="error"></div>
+        
+        <div class="result-section" id="resultSection">
+            <div class="result-title">✅ 处理完成！</div>
+            <div id="resultContent"></div>
+            <a id="downloadLink" href="#" download style="display: none;">
+                <button class="btn" style="margin-top: 20px;">📥 下载 PDF 课件</button>
+            </a>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('problemForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const resultSection = document.getElementById('resultSection');
+            const resultContent = document.getElementById('resultContent');
+            const downloadLink = document.getElementById('downloadLink');
+            
+            // 重置状态
+            submitBtn.disabled = true;
+            loading.classList.add('show');
+            error.classList.remove('show');
+            resultSection.classList.remove('show');
+            
+            const problemText = document.getElementById('problemText').value;
+            const topic = document.getElementById('topic').value;
+            const difficulty = document.getElementById('difficulty').value;
+            
+            try {
+                const response = await fetch('/api/full_pipeline', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: problemText,
+                        topic: topic || null,
+                        difficulty: difficulty || null,
+                        tags: []
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '处理失败');
+                }
+                
+                // 获取 PDF blob
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                downloadLink.href = url;
+                downloadLink.download = `problem_${new Date().getTime()}.pdf`;
+                downloadLink.style.display = 'block';
+                
+                // 显示成功信息
+                resultContent.innerHTML = '<p style="color: #27ae60; font-size: 18px;">✨ PDF 课件已生成成功！点击下方按钮下载。</p>';
+                resultSection.classList.add('show');
+                
+            } catch (err) {
+                error.textContent = '❌ 错误：' + err.message;
+                error.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+                loading.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>
+
