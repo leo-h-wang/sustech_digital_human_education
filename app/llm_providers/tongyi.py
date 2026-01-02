@@ -1,9 +1,14 @@
 """阿里云通义千问 LLM 适配器"""
 import json
 import os
+import logging
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 import httpx
 from app.llm_providers.base import LLMClient
+
+# 配置日志
+logger = logging.getLogger(__name__)
 from app.models.schemas import SolutionStep, NarrationStep
 from app.prompts.solver_prompt import get_solver_prompt
 from app.prompts.narration_prompt import get_narration_prompt
@@ -44,6 +49,21 @@ class TongyiClient(LLMClient):
         self.base_url = f"{base_domain}/api/v1/services/aigc/text-generation/generation"
         # 支持通过环境变量或参数配置模型，默认使用 qwen-turbo
         self.model = model or os.getenv("TONGYI_MODEL", "qwen-turbo")
+        
+        # 记录使用的模型信息
+        logger.info(f"🤖 通义千问客户端已初始化")
+        logger.info(f"   模型: {self.model}")
+        logger.info(f"   地域: {region}")
+        logger.info(f"   API端点: {self.base_url}")
+        
+        # 如果使用较弱的模型，给出警告
+        if self.model == "qwen-turbo":
+            logger.warning(
+                f"⚠️  当前使用 {self.model} 模型，该模型在复杂数学问题上可能准确率较低。"
+                f"建议在 .env 文件中设置 TONGYI_MODEL=qwen-max 以获得更好的答案质量。"
+            )
+        else:
+            logger.info(f"✅ 使用 {self.model} 模型，适合处理复杂数学问题")
     
     def _get_timeout(self, default_timeout: Optional[float] = None) -> float:
         """
@@ -102,6 +122,16 @@ class TongyiClient(LLMClient):
         # 获取合适的超时时间
         actual_timeout = self._get_timeout(timeout)
         
+        # 记录 API 调用信息
+        call_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        logger.info(f"📤 [调用 {call_id}] 开始调用通义千问 API")
+        logger.info(f"   模型: {self.model}")
+        logger.info(f"   参数: temperature={temperature}, max_tokens={max_tokens}")
+        logger.debug(f"   Prompt 长度: {len(prompt)} 字符")
+        logger.debug(f"   Prompt 预览: {prompt[:200]}...")
+        logger.debug(f"   超时设置: {actual_timeout} 秒")
+        
+        start_time = datetime.now()
         try:
             with httpx.Client(timeout=actual_timeout) as client:
                 response = client.post(self.base_url, json=payload, headers=headers)
@@ -149,14 +179,28 @@ class TongyiClient(LLMClient):
 
                     if not content or not isinstance(content, str) or not content.strip():
                         raise ValueError("API 返回内容为空")
+                    
+                    # 记录成功响应
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    logger.info(f"✅ [调用 {call_id}] API 调用成功")
+                    logger.info(f"   响应时间: {elapsed:.2f} 秒")
+                    logger.info(f"   响应长度: {len(content)} 字符")
+                    logger.debug(f"   响应预览: {content[:300]}...")
                     return content
 
                 raise ValueError(f"API 返回格式异常（缺少 output 字段）: {result}")
         except httpx.TimeoutException:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ [调用 {call_id}] API 请求超时（{actual_timeout}秒，已用时 {elapsed:.2f}秒）")
             raise TimeoutError(f"API 请求超时（{actual_timeout}秒）")
         except httpx.HTTPStatusError as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ [调用 {call_id}] API 请求失败: HTTP {e.response.status_code}")
+            logger.error(f"   错误详情: {e.response.text[:500]}")
             raise ValueError(f"API 请求失败: HTTP {e.response.status_code} - {e.response.text}")
         except Exception as e:
+            elapsed = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ [调用 {call_id}] API 调用异常: {str(e)}")
             raise ValueError(f"API 调用异常: {str(e)}")
     
     def _parse_solution_steps(self, response_text: str) -> List[SolutionStep]:
@@ -246,9 +290,22 @@ class TongyiClient(LLMClient):
     
     def solve(self, problem_text: str, meta: Optional[Dict[str, Any]] = None) -> List[SolutionStep]:
         """调用 LLM 解题"""
+        logger.info("=" * 60)
+        logger.info("📝 开始解题流程")
+        logger.info(f"   题目: {problem_text[:100]}..." if len(problem_text) > 100 else f"   题目: {problem_text}")
+        if meta:
+            logger.info(f"   元数据: {meta}")
+        
         prompt = get_solver_prompt(problem_text, meta or {})
-        response = self._call_api(prompt, temperature=0.3, max_tokens=3000)
-        return self._parse_solution_steps(response)
+        # 使用更低的 temperature (0.1) 以提高答案准确性和一致性
+        response = self._call_api(prompt, temperature=0.1, max_tokens=4000)
+        
+        logger.info("📊 开始解析解题步骤...")
+        steps = self._parse_solution_steps(response)
+        logger.info(f"✅ 解析完成，共生成 {len(steps)} 个步骤")
+        logger.info("=" * 60)
+        
+        return steps
     
     def narrate(
         self,
@@ -257,9 +314,19 @@ class TongyiClient(LLMClient):
         meta: Optional[Dict[str, Any]] = None
     ) -> List[NarrationStep]:
         """调用 LLM 生成讲解脚本"""
+        logger.info("=" * 60)
+        logger.info("🎙️  开始生成讲解脚本")
+        logger.info(f"   解题步骤数: {len(solution_steps)}")
+        
         prompt = get_narration_prompt(problem_text, solution_steps, meta or {})
         response = self._call_api(prompt, temperature=0.7, max_tokens=3000)
-        return self._parse_narration_steps(response, len(solution_steps))
+        
+        logger.info("📊 开始解析讲解步骤...")
+        narration_steps = self._parse_narration_steps(response, len(solution_steps))
+        logger.info(f"✅ 解析完成，共生成 {len(narration_steps)} 个讲解步骤")
+        logger.info("=" * 60)
+        
+        return narration_steps
     
     def _parse_narration_steps(self, response_text: str, expected_steps: int) -> List[NarrationStep]:
         """解析讲解步骤"""

@@ -48,17 +48,34 @@ touch .env
 编辑 `.env` 文件，添加以下内容：
 
 ```env
-LLM_PROVIDER=tongyi
+# LLM 提供商选择（tongyi 或 gemini）
+LLM_PROVIDER=gemini
+
+# ========== 通义千问配置 ==========
 TONGYI_API_KEY=你的API密钥
 TONGYI_MODEL=qwen-max  # 可选: qwen-turbo, qwen-plus, qwen-max, qwen-max-longcontext
 TONGYI_TIMEOUT=180     # 可选: 超时时间（秒），会根据模型自动调整
+
+# ========== Gemini 配置 ==========
+GEMINI_API_KEY=你的Gemini API密钥
+GEMINI_MODEL=gemini-2.5-flash  # 可选: gemini-2.5-flash, gemini-2.5-pro, gemini-1.5-pro, gemini-1.5-flash
+GEMINI_TIMEOUT=120     # 可选: 超时时间（秒），会根据模型自动调整
+
 PORT=8000
 ```
 
-**获取通义千问 API Key：**
+**获取 API Key：**
+
+**通义千问：**
 1. 访问 https://dashscope.aliyun.com/
 2. 注册/登录后进入"API-KEY管理"
 3. 创建新的 API Key 并复制到 `.env` 文件
+
+**Gemini：**
+1. 访问 https://aistudio.google.com/app/apikey
+2. 登录 Google 账号
+3. 点击 "Create API Key" 创建新的 API Key
+4. 复制 API Key 到 `.env` 文件中的 `GEMINI_API_KEY`
 
 ### 3. 运行服务
 

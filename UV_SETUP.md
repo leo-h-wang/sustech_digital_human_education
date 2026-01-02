@@ -58,9 +58,10 @@ touch .env
 在 `.env` 文件中添加以下内容：
 
 ```env
-# LLM 提供商（tongyi, spark, kimi）
-LLM_PROVIDER=tongyi
+# LLM 提供商（tongyi, gemini, spark, kimi）
+LLM_PROVIDER=gemini
 
+# ========== 通义千问配置 ==========
 # 通义千问 API Key
 # 获取方式：访问 https://dashscope.aliyun.com/ 注册并创建 API Key
 TONGYI_API_KEY=你的API密钥
@@ -72,8 +73,26 @@ TONGYI_MODEL=qwen-max
 
 # 通义千问超时配置（可选，会根据模型自动调整）
 # qwen-max 等强模型默认 180 秒，qwen-plus 默认 120 秒，qwen-turbo 默认 60 秒
-# 如果遇到超时问题，可以手动设置更长的超时时间（单位：秒）
 # TONGYI_TIMEOUT=180
+
+# ========== Gemini 配置 ==========
+# Gemini API Key
+# 获取方式：访问 https://aistudio.google.com/app/apikey 创建 API Key
+GEMINI_API_KEY=你的Gemini API密钥
+
+# Gemini 模型配置（可选，默认 gemini-2.5-flash）
+# 可选值: gemini-2.5-flash（推荐，免费层级可用，速度快）, gemini-2.5-pro（最强，可能需要付费）
+# gemini-1.5-pro（Pro版本）, gemini-1.5-flash（快速版本）
+GEMINI_MODEL=gemini-2.5-flash
+
+# Gemini 超时配置（可选，会根据模型自动调整）
+# Flash 模型默认 120 秒，Pro 模型默认 180 秒
+# GEMINI_TIMEOUT=120
+
+# Gemini 速率限制配置（可选，针对免费层级优化）
+# GEMINI_MAX_RETRIES=3      # 最大重试次数（默认 3）
+# GEMINI_RETRY_DELAY=1.0    # 初始重试延迟（秒，默认 1.0）
+# GEMINI_MIN_INTERVAL=6.0   # 请求最小间隔（秒，默认 6.0，符合免费层级 RPM=10 的限制）
 
 # 服务端口（可选，默认8000）
 PORT=8000

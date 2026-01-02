@@ -61,14 +61,46 @@ def try_fix_json_response(response_text: str) -> Optional[List[Dict]]:
     Returns:
         解析后的数据，如果失败返回 None
     """
-    # 尝试提取 JSON 部分
+    # 首先尝试直接解析整个响应
+    try:
+        data = json.loads(response_text.strip())
+        if isinstance(data, list) and len(data) > 0:
+            return data
+    except json.JSONDecodeError:
+        pass
+    
+    # 尝试提取 JSON 数组（使用非贪婪匹配，但需要匹配完整的JSON结构）
+    # 先找最外层的数组
+    json_start = response_text.find('[')
+    if json_start >= 0:
+        # 从第一个 [ 开始，找到匹配的 ]
+        bracket_count = 0
+        json_end = json_start
+        for i in range(json_start, len(response_text)):
+            if response_text[i] == '[':
+                bracket_count += 1
+            elif response_text[i] == ']':
+                bracket_count -= 1
+                if bracket_count == 0:
+                    json_end = i + 1
+                    break
+        
+        if json_end > json_start:
+            json_str = response_text[json_start:json_end]
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+            except json.JSONDecodeError:
+                pass
+    
+    # 尝试使用正则表达式匹配（作为备选）
     json_patterns = [
-        r'\[[\s\S]*?\]',  # 匹配数组
-        r'\{[\s\S]*?\}',  # 匹配对象
+        r'\[[\s\S]*?\]',  # 匹配数组（非贪婪）
     ]
     
     for pattern in json_patterns:
-        matches = re.findall(pattern, response_text)
+        matches = re.findall(pattern, response_text, re.DOTALL)
         for match in matches:
             try:
                 data = json.loads(match)
@@ -82,10 +114,53 @@ def try_fix_json_response(response_text: str) -> Optional[List[Dict]]:
 
 def sanitize_solution_step(step: Dict[str, Any]) -> Dict[str, Any]:
     """清理和规范化解题步骤"""
+    # 处理 title 字段：如果包含 JSON 字符串，尝试提取
+    title = str(step.get("title", "")).strip()
+    if title and ('"step_index"' in title or title.startswith('"')):
+        # 可能是JSON字符串被错误解析，尝试提取真正的title
+        try:
+            import re
+            # 尝试匹配 "title": "实际标题"
+            title_match = re.search(r'"title":\s*"([^"]+)"', title)
+            if title_match:
+                title = title_match.group(1)
+            # 如果还是包含JSON结构，尝试其他方式
+            elif title.startswith('"') and title.endswith(','):
+                # 可能是 "step_index": 1, 这种格式
+                title = "解题步骤"
+        except:
+            pass
+    
+    # 处理 description 字段：如果包含 JSON 字符串，尝试提取
+    description = str(step.get("description", "")).strip()
+    if description and ('"title"' in description or '"description"' in description):
+        # 可能是JSON字符串，尝试解析
+        try:
+            import re
+            # 尝试提取真正的description
+            desc_match = re.search(r'"description":\s*"([^"]+(?:\\.[^"]*)*)"', description)
+            if desc_match:
+                # 处理转义字符
+                desc_text = desc_match.group(1).replace('\\n', '\n').replace('\\"', '"')
+                description = desc_text
+            # 或者尝试解析整个JSON对象
+            elif description.startswith('"') or description.startswith('{'):
+                # 尝试提取多行description（处理 \n 转义）
+                desc_lines = []
+                for line in description.split('\\n'):
+                    line = line.strip().strip('"').strip(',')
+                    # 跳过JSON结构标记
+                    if line and not line.startswith('"') and not line.startswith('{') and '":' not in line:
+                        desc_lines.append(line)
+                if desc_lines:
+                    description = '\n'.join(desc_lines)
+        except:
+            pass
+    
     return {
         "step_index": int(step.get("step_index", 0)) or 1,
-        "title": str(step.get("title", "")).strip() or "解题步骤",
-        "description": str(step.get("description", "")).strip() or "",
+        "title": title or "解题步骤",
+        "description": description or "",
         "formula_latex": str(step.get("formula_latex", "")).strip() if step.get("formula_latex") else None
     }
 
