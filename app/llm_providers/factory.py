@@ -3,6 +3,7 @@ import os
 from typing import Optional
 from app.llm_providers.base import LLMClient
 from app.llm_providers.tongyi import TongyiClient
+from app.llm_providers.gemini import GeminiClient
 
 
 def create_llm_client(provider: Optional[str] = None) -> LLMClient:
@@ -10,7 +11,7 @@ def create_llm_client(provider: Optional[str] = None) -> LLMClient:
     创建 LLM 客户端实例
     
     Args:
-        provider: 提供商名称（tongyi, spark, kimi等），如果为None则从环境变量获取
+        provider: 提供商名称（tongyi, gemini, spark, kimi等），如果为None则从环境变量获取
         
     Returns:
         LLMClient 实例
@@ -19,6 +20,8 @@ def create_llm_client(provider: Optional[str] = None) -> LLMClient:
     
     if provider == "tongyi":
         return TongyiClient()
+    elif provider == "gemini":
+        return GeminiClient()
     elif provider == "spark":
         # TODO: 实现星火客户端
         raise NotImplementedError("星火客户端尚未实现")
