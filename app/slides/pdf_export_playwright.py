@@ -179,29 +179,11 @@ def generate_pdf(
     output_path: Optional[str] = None
 ) -> BytesIO:
     """
-    生成 PDF - 自动选择可用的方法（同步版本）
+    生成 PDF（同步版本）
     """
-    # 首先尝试 Playwright（推荐）
-    try:
-        return generate_pdf_with_playwright(
-            problem_text, solution_steps, narration_steps, output_path
-        )
-    except ImportError as e:
-        logger.warning(f"Playwright 不可用，尝试 WeasyPrint: {e}")
-        
-        # 降级到 WeasyPrint
-        try:
-            from app.slides.pdf_export import generate_pdf as weasyprint_generate
-            return weasyprint_generate(
-                problem_text, solution_steps, narration_steps, output_path
-            )
-        except Exception as we:
-            logger.error(f"WeasyPrint 也失败: {we}")
-            raise RuntimeError(
-                "无法生成PDF。请安装 Playwright:\n"
-                "  uv pip install playwright\n"
-                "  uv run playwright install chromium\n"
-            ) from e
+    return generate_pdf_with_playwright(
+        problem_text, solution_steps, narration_steps, output_path
+    )
 
 
 async def generate_pdf_async(
@@ -211,33 +193,9 @@ async def generate_pdf_async(
     output_path: Optional[str] = None
 ) -> BytesIO:
     """
-    生成 PDF - 自动选择可用的方法（异步版本，用于FastAPI）
+    生成 PDF（异步版本，用于FastAPI）
     """
-    # 首先尝试 Playwright（推荐）
-    try:
-        return await generate_pdf_with_playwright_async(
-            problem_text, solution_steps, narration_steps, output_path
-        )
-    except ImportError as e:
-        logger.warning(f"Playwright 不可用，尝试 WeasyPrint: {e}")
-        
-        # 降级到 WeasyPrint（在线程池中运行）
-        try:
-            from app.slides.pdf_export import generate_pdf as weasyprint_generate
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                _thread_pool,
-                weasyprint_generate,
-                problem_text,
-                solution_steps,
-                narration_steps,
-                output_path
-            )
-        except Exception as we:
-            logger.error(f"WeasyPrint 也失败: {we}")
-            raise RuntimeError(
-                "无法生成PDF。请安装 Playwright:\n"
-                "  uv pip install playwright\n"
-                "  uv run playwright install chromium\n"
-            ) from e
+    return await generate_pdf_with_playwright_async(
+        problem_text, solution_steps, narration_steps, output_path
+    )
 
