@@ -15,7 +15,7 @@ from app.models.schemas import (
 )
 from app.llm_providers.factory import create_llm_client
 from app.llm_providers.base import LLMClient
-from app.slides.pdf_export import generate_pdf
+from app.slides.pdf_export_playwright import generate_pdf_async, generate_pdf
 from app.text.tts_friendly import convert_to_tts_friendly
 from app.utils.pdf_merge import merge_pdfs
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -104,7 +104,7 @@ async def generate_pdf_endpoint(request: PDFGenerationRequest):
     生成 PDF 接口：输入题目、解题步骤和讲解步骤，返回 PDF 文件
     """
     try:
-        pdf_bytes = generate_pdf(
+        pdf_bytes = await generate_pdf_async(
             problem_text=request.problem_text,
             solution_steps=request.solution_steps,
             narration_steps=request.narration_steps
@@ -170,7 +170,7 @@ async def full_pipeline(
         
         # 步骤3：生成 PDF
         try:
-            pdf_bytes = generate_pdf(
+            pdf_bytes = await generate_pdf_async(
                 problem_text=problem.text,
                 solution_steps=solution_steps,
                 narration_steps=narration_steps
@@ -220,7 +220,7 @@ def _process_single_problem(
         for step in narration_steps:
             step.narration_text = convert_to_tts_friendly(step.narration_text)
         
-        # 生成 PDF
+        # 生成 PDF（批处理中使用同步版本）
         pdf_bytes = generate_pdf(
             problem_text=problem.text,
             solution_steps=solution_steps,

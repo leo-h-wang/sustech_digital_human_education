@@ -2,6 +2,10 @@
 from typing import List, Optional
 from jinja2 import Template
 from app.models.schemas import SolutionStep, NarrationStep
+from app.utils.latex_converter import latex_to_mathml
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 SLIDE_TEMPLATE = """
@@ -63,6 +67,16 @@ SLIDE_TEMPLATE = """
             border-left: 4px solid #4a90e2;
             font-family: "Times New Roman", serif;
             font-size: 20px;
+            overflow-x: auto;
+        }
+        /* MathML 样式支持 */
+        .formula math {
+            display: block;
+            margin: 10px auto;
+            font-size: 18px;
+        }
+        math {
+            font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", serif;
         }
         .narration-text {
             font-size: 24px;
@@ -105,9 +119,9 @@ SLIDE_TEMPLATE = """
         </div>
         {% endif %}
         
-        {% if slide.formula_latex %}
+        {% if slide.formula_mathml %}
         <div class="formula">
-            {{ slide.formula_latex }}
+            {{ slide.formula_mathml | safe }}
         </div>
         {% endif %}
         
@@ -129,7 +143,7 @@ def generate_slides_html(
     narration_steps: Optional[List[NarrationStep]] = None
 ) -> str:
     """
-    生成幻灯片 HTML
+    生成幻灯片 HTML（LaTeX 公式以纯文本显示，用于网页浏览）
     
     Args:
         problem_text: 题目文本
@@ -146,7 +160,7 @@ def generate_slides_html(
             "step_index": step.step_index,
             "title": step.title,
             "description": step.description,
-            "formula_latex": step.formula_latex,
+            "formula_mathml": step.formula_latex,  # 保持原LaTeX用于显示
             "narration_text": None
         }
         
@@ -165,7 +179,68 @@ def generate_slides_html(
             "step_index": 1,
             "title": "题目解析",
             "description": "暂无详细步骤",
-            "formula_latex": None,
+            "formula_mathml": None,
+            "narration_text": None
+        })
+    
+    template = Template(SLIDE_TEMPLATE)
+    html = template.render(
+        problem_text=problem_text,
+        slides=slides
+    )
+    
+    return html
+
+
+def generate_slides_html_with_formulas(
+    problem_text: str,
+    solution_steps: List[SolutionStep],
+    narration_steps: Optional[List[NarrationStep]] = None
+) -> str:
+    """
+    生成带有MathML渲染公式的幻灯片 HTML（用于PDF导出）
+    
+    Args:
+        problem_text: 题目文本
+        solution_steps: 解题步骤列表
+        narration_steps: 讲解步骤列表（可选）
+        
+    Returns:
+        HTML 字符串，其中LaTeX公式已转换为MathML
+    """
+    # 合并步骤信息并转换公式
+    slides = []
+    for i, step in enumerate(solution_steps):
+        # 转换 LaTeX 公式为 MathML
+        formula_mathml = None
+        if step.formula_latex:
+            logger.info(f"转换步骤 {step.step_index} 的公式: {step.formula_latex[:50]}...")
+            formula_mathml = latex_to_mathml(step.formula_latex)
+        
+        slide_data = {
+            "step_index": step.step_index,
+            "title": step.title,
+            "description": step.description,
+            "formula_mathml": formula_mathml,
+            "narration_text": None
+        }
+        
+        # 如果有对应的讲解步骤，添加进去
+        if narration_steps:
+            for narration in narration_steps:
+                if narration.step_index == step.step_index:
+                    slide_data["narration_text"] = narration.narration_text
+                    break
+        
+        slides.append(slide_data)
+    
+    # 如果没有讲解步骤，至少生成解题步骤的幻灯片
+    if not slides:
+        slides.append({
+            "step_index": 1,
+            "title": "题目解析",
+            "description": "暂无详细步骤",
+            "formula_mathml": None,
             "narration_text": None
         })
     
