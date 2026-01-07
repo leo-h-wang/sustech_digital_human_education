@@ -2,7 +2,7 @@
 from typing import List, Optional
 from jinja2 import Template
 from app.models.schemas import SolutionStep, NarrationStep
-from app.utils.latex_converter import latex_to_mathml
+from app.utils.latex_converter import latex_to_mathml, process_text_with_latex
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ SLIDE_TEMPLATE = """
             margin: 0;
             padding: 20px;
             background: #f5f5f5;
+            box-sizing: border-box;
         }
         .slide {
             width: 100%;
@@ -34,6 +35,7 @@ SLIDE_TEMPLATE = """
             padding: 40px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             page-break-after: always;
+            box-sizing: border-box;
         }
         .slide:last-child {
             page-break-after: auto;
@@ -46,6 +48,8 @@ SLIDE_TEMPLATE = """
             font-size: 20px;
             font-weight: bold;
             border-radius: 0;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         .step-title {
             font-size: 28px;
@@ -53,12 +57,19 @@ SLIDE_TEMPLATE = """
             margin-bottom: 20px;
             padding-bottom: 10px;
             border-bottom: 3px solid #4a90e2;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         .step-content {
             font-size: 22px;
             line-height: 1.8;
             color: #34495e;
             margin-bottom: 20px;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            hyphens: auto;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         .formula {
             background: #f8f9fa;
@@ -68,15 +79,31 @@ SLIDE_TEMPLATE = """
             font-family: "Times New Roman", serif;
             font-size: 20px;
             overflow-x: auto;
+            word-break: normal;
+            overflow-wrap: normal;
+            white-space: nowrap; /* 避免公式被强制断行，超宽时横向滚动 */
+            max-width: 100%;
+            box-sizing: border-box;
         }
         /* MathML 样式支持 */
         .formula math {
             display: block;
             margin: 10px auto;
-            font-size: 18px;
+            font-size: 16px;
+            max-width: 100%;
+            overflow-x: auto;
+            white-space: nowrap;
+            word-break: normal;
+            overflow-wrap: normal;
         }
         math {
             font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", serif;
+            max-width: 100%;
+            display: inline-block;
+            overflow-x: auto;
+            white-space: nowrap;
+            word-break: normal;
+            overflow-wrap: normal;
         }
         .narration-text {
             font-size: 24px;
@@ -85,6 +112,10 @@ SLIDE_TEMPLATE = """
             padding: 20px;
             background: #f8f9fa;
             border-radius: 8px;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         .step-number {
             display: inline-block;
@@ -164,12 +195,14 @@ def generate_slides_html(
             "narration_text": None
         }
         
-        # 如果有对应的讲解步骤，添加进去
+        # 如果有对应的讲解步骤，合并所有匹配的 narration_text
         if narration_steps:
+            narration_texts = []
             for narration in narration_steps:
                 if narration.step_index == step.step_index:
-                    slide_data["narration_text"] = narration.narration_text
-                    break
+                    narration_texts.append(narration.narration_text)
+            if narration_texts:
+                slide_data["narration_text"] = ' '.join(narration_texts)
         
         slides.append(slide_data)
     
@@ -208,29 +241,39 @@ def generate_slides_html_with_formulas(
     Returns:
         HTML 字符串，其中LaTeX公式已转换为MathML
     """
+    # 处理题目文本中的 LaTeX 公式
+    processed_problem_text = process_text_with_latex(problem_text)
+    
     # 合并步骤信息并转换公式
     slides = []
     for i, step in enumerate(solution_steps):
-        # 转换 LaTeX 公式为 MathML
+        # 处理 description 中的 LaTeX 公式
+        processed_description = None
+        if step.description:
+            processed_description = process_text_with_latex(step.description)
+        
+        # 处理 formula_latex（可能包含换行和混合内容）
         formula_mathml = None
         if step.formula_latex:
             logger.info(f"转换步骤 {step.step_index} 的公式: {step.formula_latex[:50]}...")
-            formula_mathml = latex_to_mathml(step.formula_latex)
+            formula_mathml = process_text_with_latex(step.formula_latex)
         
         slide_data = {
             "step_index": step.step_index,
             "title": step.title,
-            "description": step.description,
+            "description": processed_description,
             "formula_mathml": formula_mathml,
             "narration_text": None
         }
         
-        # 如果有对应的讲解步骤，添加进去
+        # 如果有对应的讲解步骤，合并所有匹配的 narration_text
         if narration_steps:
+            narration_texts = []
             for narration in narration_steps:
                 if narration.step_index == step.step_index:
-                    slide_data["narration_text"] = narration.narration_text
-                    break
+                    narration_texts.append(narration.narration_text)
+            if narration_texts:
+                slide_data["narration_text"] = ' '.join(narration_texts)
         
         slides.append(slide_data)
     
@@ -246,7 +289,7 @@ def generate_slides_html_with_formulas(
     
     template = Template(SLIDE_TEMPLATE)
     html = template.render(
-        problem_text=problem_text,
+        problem_text=processed_problem_text,
         slides=slides
     )
     
