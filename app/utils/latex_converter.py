@@ -108,7 +108,29 @@ def _process_bare_latex(text: str) -> str:
         return text
     start = first_cmd.start()
 
+    # 如果裸命令前紧跟的是一个数字系数（如 "2\\sqrt{3}"），把系数一起纳入 MathML，
+    # 否则浏览器可能在 "2" 和 <math> 之间断行。
     prefix = text[:start]
+    coeff_match = re.search(r'([+\-]?\s*\d+(?:\.\d+)?)\s*$', prefix)
+    if coeff_match:
+        # #region agent log
+        try:
+            import json, time as _t
+            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "formula-debug",
+                    "hypothesisId": "F4",
+                    "location": "latex_converter._process_bare_latex:merge_coeff",
+                    "message": "merged numeric coeff into latex_part",
+                    "data": {"prefix_tail": prefix[max(0, len(prefix)-30):], "coeff": coeff_match.group(1)},
+                    "timestamp": int(_t.time()*1000)
+                }) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        start = coeff_match.start()
+        prefix = text[:start]
     latex_part = text[start:]
 
     try:
@@ -212,10 +234,29 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
         
         # 预处理 LaTeX 命令
         latex_clean = _preprocess_latex(latex_clean)
+#region agent log
+        try:
+            import json, time as _t
+            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "formula-debug",
+                    "hypothesisId": "F3",
+                    "location": "latex_converter.latex_to_mathml:pre_convert",
+                    "message": "cleaned latex",
+                    "data": {"src": latex_clean[:200], "display_block": display_block},
+                    "timestamp": int(_t.time()*1000)
+                }) + "\n")
+        except Exception:
+            pass
+#endregion
         
         # 转换为 MathML（不需要添加美元符号，直接传递纯LaTeX）
         mathml = convert(latex_clean)
         
+        # 规范 display 属性：避免出现重复 display="..."（无效/不确定行为）
+        mathml = re.sub(r'\sdisplay="(?:inline|block)"', '', mathml, count=1)
+
         # 添加样式属性
         if mathml.startswith('<math'):
             if display_block:
@@ -224,6 +265,23 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
             else:
                 # 行内显示
                 mathml = mathml.replace('<math', '<math display="inline" style="font-size: 16px; vertical-align: middle;"', 1)
+
+        # #region agent log
+        try:
+            import json, time as _t
+            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "formula-debug",
+                    "hypothesisId": "F5",
+                    "location": "latex_converter.latex_to_mathml:post_convert",
+                    "message": "mathml head",
+                    "data": {"head": mathml[:160], "display_block": display_block},
+                    "timestamp": int(_t.time()*1000)
+                }) + "\n")
+        except Exception:
+            pass
+        # #endregion
         
         return mathml
         
