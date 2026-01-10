@@ -117,6 +117,26 @@ SLIDE_TEMPLATE = """
             word-break: normal;
             overflow-wrap: normal;
         }
+
+        /* PDF/打印输出不显示滚动条：需要允许多行推导正常换行，避免右侧裁切 */
+        @media print {
+            .formula {
+                overflow-x: visible;
+                white-space: normal;
+            }
+            .formula math {
+                overflow-x: visible;
+                white-space: normal;
+                font-size: 15px;
+            }
+            .problem-header {
+                overflow-x: visible;
+                white-space: normal;
+            }
+            .problem-header math {
+                white-space: normal;
+            }
+        }
         .narration-text {
             font-size: 24px;
             line-height: 2;

@@ -26,6 +26,28 @@ def process_text_with_latex(text: str) -> str:
     """
     if not text or not text.strip():
         return ""
+
+    # #region agent log
+    try:
+        import json, time as _t
+        with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({
+                "sessionId": "debug-session",
+                "runId": "formula-debug",
+                "hypothesisId": "TX1",
+                "location": "latex_converter.process_text_with_latex:entry",
+                "message": "entry",
+                "data": {
+                    "len": len(text),
+                    "has_text_cmd": ("\\text{" in text),
+                    "text_cmd_count": text.count("\\text{"),
+                    "head": text[:220],
+                },
+                "timestamp": int(_t.time()*1000)
+            }) + "\n")
+    except Exception:
+        pass
+    # #endregion
     
     # 首先处理换行符
     text = text.replace('\\n', '\n')
@@ -47,12 +69,42 @@ def process_text_with_latex(text: str) -> str:
     
     # 处理行内公式 $...$（避免匹配已处理的块级公式）
     text = re.sub(r'(?<!\$)\$([^$]+?)\$(?!\$)', replace_inline_latex, text)
+
+    # 清理残留的未转义 `$`（常见于 LLM 输出丢失右侧 `$` 的情况：仅保留了开头 `$=`）
+    # 注意：保留 `\$` 这种“显示美元符号”的写法
+    text = re.sub(r'(?<!\\)\$', '', text)
     
     # 处理 \[...\] 块级公式
     text = re.sub(r'\\\[(.+?)\\\]', replace_block_latex, text, flags=re.DOTALL)
     
     # 处理 \(...\) 行内公式
     text = re.sub(r'\\\((.+?)\\\)', replace_inline_latex, text, flags=re.DOTALL)
+
+    # 处理「非数学模式」下的 \text{...}（常见于 LLM 输出：$$...$$ \text{令 } $u=...$）
+    # 这类 \text{} 不在 $...$ / $$...$$ 中时，不会进入 latex_to_mathml，需在这里降级为纯文本。
+    # 注意：只处理无嵌套花括号的常见情况，避免错误吞噬复杂结构。
+    text = re.sub(r'\\text\s*\{([^{}]*)\}', r'\1', text)
+
+    # #region agent log
+    try:
+        import json, time as _t
+        with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({
+                "sessionId": "debug-session",
+                "runId": "formula-debug",
+                "hypothesisId": "TX2",
+                "location": "latex_converter.process_text_with_latex:after_math_delims",
+                "message": "after math delimiter conversion",
+                "data": {
+                    "has_text_cmd": ("\\text{" in text),
+                    "text_cmd_count": text.count("\\text{"),
+                    "snippet": text[:220],
+                },
+                "timestamp": int(_t.time()*1000)
+            }) + "\n")
+    except Exception:
+        pass
+    # #endregion
     
     # 处理无分隔符的裸 LaTeX 公式（检测常见的 LaTeX 命令）
     text = _process_bare_latex(text)
@@ -62,6 +114,27 @@ def process_text_with_latex(text: str) -> str:
 
     # 将剩余的换行符转换为 <br>
     text = text.replace('\n', '<br>\n')
+
+    # #region agent log
+    try:
+        import json, time as _t
+        with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({
+                "sessionId": "debug-session",
+                "runId": "formula-debug",
+                "hypothesisId": "TX3",
+                "location": "latex_converter.process_text_with_latex:exit",
+                "message": "exit",
+                "data": {
+                    "has_text_cmd": ("\\text{" in text),
+                    "text_cmd_count": text.count("\\text{"),
+                    "tail": text[-220:],
+                },
+                "timestamp": int(_t.time()*1000)
+            }) + "\n")
+    except Exception:
+        pass
+    # #endregion
     
     return text
 
@@ -92,8 +165,48 @@ def _process_bare_latex(text: str) -> str:
 
     stripped = text.strip()
 
+    # 情况0：整行几乎都是数学表达式（但可能不以 '\' 开头，比如 '2 \left(\frac...\right)=...）
+    # 这种情况下如果走“只截取 \frac...”会打断 \left/\right 配对，导致转换失败并原样输出。
+    if (
+        _is_primarily_latex(stripped)
+        and ('<math' not in stripped)
+        and ('$' not in stripped)
+        and ('\n' not in stripped)
+    ):
+        # #region agent log
+        try:
+            import json, time as _t
+            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
+                _f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "formula-debug",
+                    "hypothesisId": "BL0",
+                    "location": "latex_converter._process_bare_latex:whole_line",
+                    "message": "convert whole line (primarily latex)",
+                    "data": {"head": stripped[:180]},
+                    "timestamp": int(_t.time()*1000)
+                }) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        try:
+            mathml = latex_to_mathml(stripped, display_block=True)
+            if mathml and '<math' in mathml:
+                return mathml
+        except Exception as e:
+            logger.warning(f"裸 LaTeX 整行转换失败: {e}")
+
     # 情况1：整体是 LaTeX
-    if re.match(r'^\\[a-zA-Z]+', stripped) and not re.search(r'[A-Za-z]{2,}\s+[A-Za-z]{2,}', stripped):
+    # 关键保护：如果文本已经包含 MathML（<math...>）或包含 $ / 换行，说明是“混合文本”
+    # 此时绝不能把整段再次当成 LaTeX 去 convert，否则会把 '$' 当普通字符渲染（<mi>$</mi>），
+    # 甚至触发 fallback 导致 PDF 直接显示 "mathdisplay=..." 文本。
+    if (
+        re.match(r'^\\[a-zA-Z]+', stripped)
+        and ('<math' not in stripped)
+        and ('$' not in stripped)
+        and ('\n' not in stripped)
+        and not re.search(r'[A-Za-z]{2,}\s+[A-Za-z]{2,}', stripped)
+    ):
         try:
             mathml = latex_to_mathml(stripped, display_block=True)
             if mathml and '<math' in mathml:
@@ -131,12 +244,25 @@ def _process_bare_latex(text: str) -> str:
         # #endregion
         start = coeff_match.start()
         prefix = text[:start]
-    latex_part = text[start:]
+    # 只把“当前行/片段”的 LaTeX 转掉，避免把后续已经转换出的 <math> 或原始 $...$ 一并送进 convert()
+    # 片段边界：到换行 or HTML 标签开始处
+    next_nl = text.find('\n', start)
+    next_lt = text.find('<', start)
+    end = len(text)
+    if next_nl != -1:
+        end = min(end, next_nl)
+    if next_lt != -1:
+        end = min(end, next_lt)
+
+    latex_part = text[start:end]
+    suffix = text[end:]
 
     try:
-        mathml = latex_to_mathml(latex_part, display_block=False)
+        # 若该片段位于行首且后面紧接换行/段落，更像公式块，优先块级显示
+        display_block = (prefix.strip() == "" and suffix.startswith('\n'))
+        mathml = latex_to_mathml(latex_part, display_block=display_block)
         if mathml and '<math' in mathml:
-            return prefix + mathml
+            return prefix + mathml + suffix
     except Exception as e:
         logger.warning(f"裸 LaTeX 片段转换失败: {e}")
 
@@ -171,8 +297,15 @@ def _preprocess_latex(latex_str: str) -> str:
     """
     预处理 LaTeX 字符串，将一些 latex2mathml 不支持的命令转换为支持的格式
     """
-    # 将 LaTeX 的换行命令 \\ 转为空格，避免在 MathML 中被强制换行
-    latex_str = re.sub(r'\\\\(?![a-zA-Z])', ' ', latex_str)
+    # 对齐环境（aligned/align）需要保留换行与移除对齐锚点 '&'：
+    # - 若把 '\\\\' 替换成空格，会把多行推导压成一行，PDF 中容易超宽被裁切
+    # - 部分渲染器/版本会把 '&' 作为可见字符渲染（用户看到 '= 前多一个 &')
+    in_align_env = bool(re.search(r'\\begin\{align\*?\}|\\begin\{aligned\}', latex_str))
+    if in_align_env:
+        latex_str = latex_str.replace('&', '')
+    else:
+        # 非对齐环境：将 LaTeX 的换行命令 \\ 转为空格，避免在 MathML 中被强制换行
+        latex_str = re.sub(r'\\\\(?![a-zA-Z])', ' ', latex_str)
 
     # \mathrm{d} -> {\rm d} 或直接用 d（积分微分符号）
     latex_str = re.sub(r'\\mathrm\{([^}]+)\}', r'{\rm \1}', latex_str)
