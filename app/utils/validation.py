@@ -54,6 +54,45 @@ def validate_narration_steps(steps: List[Dict[str, Any]]) -> tuple[bool, Optiona
     return True, None
 
 
+def _fix_json_escape_sequences(json_str: str) -> str:
+    """
+    修复 JSON 中的无效转义序列
+    
+    LaTeX 公式中的反斜杠（如 \int, \frac）在 JSON 中是无效的转义序列，
+    需要将单个 \ 转换为 \\
+    """
+    # 有效的 JSON 转义序列
+    valid_escapes = {'"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'}
+    
+    result = []
+    i = 0
+    while i < len(json_str):
+        char = json_str[i]
+        if char == '\\' and i + 1 < len(json_str):
+            next_char = json_str[i + 1]
+            if next_char in valid_escapes:
+                # 有效的转义序列，保持原样
+                result.append(char)
+                result.append(next_char)
+                i += 2
+            elif next_char == '\\':
+                # 已经是双反斜杠
+                result.append(char)
+                result.append(next_char)
+                i += 2
+            else:
+                # 无效的转义序列（如 \i, \f 在 LaTeX 中），添加额外的反斜杠
+                result.append('\\')
+                result.append('\\')
+                result.append(next_char)
+                i += 2
+        else:
+            result.append(char)
+            i += 1
+    
+    return ''.join(result)
+
+
 def try_fix_json_response(response_text: str) -> Optional[List[Dict]]:
     """
     尝试修复和提取 JSON 响应
@@ -64,6 +103,15 @@ def try_fix_json_response(response_text: str) -> Optional[List[Dict]]:
     # 首先尝试直接解析整个响应
     try:
         data = json.loads(response_text.strip())
+        if isinstance(data, list) and len(data) > 0:
+            return data
+    except json.JSONDecodeError:
+        pass
+    
+    # 尝试修复无效的转义序列后再解析
+    try:
+        fixed_response = _fix_json_escape_sequences(response_text.strip())
+        data = json.loads(fixed_response)
         if isinstance(data, list) and len(data) > 0:
             return data
     except json.JSONDecodeError:
@@ -87,8 +135,18 @@ def try_fix_json_response(response_text: str) -> Optional[List[Dict]]:
         
         if json_end > json_start:
             json_str = response_text[json_start:json_end]
+            # 先尝试直接解析
             try:
                 data = json.loads(json_str)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+            except json.JSONDecodeError:
+                pass
+            
+            # 尝试修复后解析
+            try:
+                fixed_json = _fix_json_escape_sequences(json_str)
+                data = json.loads(fixed_json)
                 if isinstance(data, list) and len(data) > 0:
                     return data
             except json.JSONDecodeError:
@@ -107,7 +165,14 @@ def try_fix_json_response(response_text: str) -> Optional[List[Dict]]:
                 if isinstance(data, list) and len(data) > 0:
                     return data
             except json.JSONDecodeError:
-                continue
+                # 尝试修复后解析
+                try:
+                    fixed_match = _fix_json_escape_sequences(match)
+                    data = json.loads(fixed_match)
+                    if isinstance(data, list) and len(data) > 0:
+                        return data
+                except json.JSONDecodeError:
+                    continue
     
     return None
 

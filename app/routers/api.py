@@ -15,8 +15,9 @@ from app.models.schemas import (
 )
 from app.llm_providers.factory import create_llm_client
 from app.llm_providers.base import LLMClient
-from app.slides.pdf_export import generate_pdf
+from app.slides.pdf_export_playwright import generate_pdf_async, generate_pdf
 from app.text.tts_friendly import convert_to_tts_friendly
+from app.utils.text_utils import clean_problem_text
 from app.utils.pdf_merge import merge_pdfs
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
@@ -45,20 +46,23 @@ async def solve_problem(
         if len(problem.text) > 5000:
             raise HTTPException(status_code=400, detail="题目文本过长（超过5000字符）")
         
+        # 清理题目文本（规范化LaTeX转义等）
+        cleaned_text = clean_problem_text(problem.text)
+        
         meta = {
             "topic": problem.topic,
             "difficulty": problem.difficulty,
             "tags": problem.tags
         }
         
-        steps = llm_client.solve(problem.text, meta)
+        steps = llm_client.solve(cleaned_text, meta)
         
         # 验证返回结果
         if not steps:
             raise HTTPException(status_code=500, detail="LLM 返回的解题步骤为空")
         
         return SolutionResponse(
-            problem_text=problem.text,
+            problem_text=cleaned_text,
             steps=steps,
             method=None
         )
@@ -104,7 +108,7 @@ async def generate_pdf_endpoint(request: PDFGenerationRequest):
     生成 PDF 接口：输入题目、解题步骤和讲解步骤，返回 PDF 文件
     """
     try:
-        pdf_bytes = generate_pdf(
+        pdf_bytes = await generate_pdf_async(
             problem_text=request.problem_text,
             solution_steps=request.solution_steps,
             narration_steps=request.narration_steps
@@ -134,6 +138,9 @@ async def full_pipeline(
         if not problem.text or not problem.text.strip():
             raise HTTPException(status_code=400, detail="题目文本不能为空")
         
+        # 清理题目文本
+        cleaned_text = clean_problem_text(problem.text)
+        
         # 步骤1：解题
         meta = {
             "topic": problem.topic,
@@ -142,7 +149,7 @@ async def full_pipeline(
         }
         
         try:
-            solution_steps = llm_client.solve(problem.text, meta)
+            solution_steps = llm_client.solve(cleaned_text, meta)
             if not solution_steps:
                 raise HTTPException(status_code=500, detail="解题步骤生成失败")
         except TimeoutError as e:
@@ -150,7 +157,7 @@ async def full_pipeline(
         
         # 步骤2：生成讲解
         try:
-            narration_steps = llm_client.narrate(problem.text, solution_steps, meta)
+            narration_steps = llm_client.narrate(cleaned_text, solution_steps, meta)
             if not narration_steps:
                 # 如果没有生成讲解，使用解题步骤作为备选
                 from app.models.schemas import NarrationStep
@@ -170,8 +177,8 @@ async def full_pipeline(
         
         # 步骤3：生成 PDF
         try:
-            pdf_bytes = generate_pdf(
-                problem_text=problem.text,
+            pdf_bytes = await generate_pdf_async(
+                problem_text=cleaned_text,
                 solution_steps=solution_steps,
                 narration_steps=narration_steps
             )
@@ -180,7 +187,7 @@ async def full_pipeline(
         
         # 保存题目记录（可选）
         try:
-            save_problem_record(problem.text, solution_steps, narration_steps, meta)
+            save_problem_record(cleaned_text, solution_steps, narration_steps, meta)
         except Exception:
             # 记录保存失败不影响主流程
             pass
@@ -220,7 +227,7 @@ def _process_single_problem(
         for step in narration_steps:
             step.narration_text = convert_to_tts_friendly(step.narration_text)
         
-        # 生成 PDF
+        # 生成 PDF（批处理中使用同步版本）
         pdf_bytes = generate_pdf(
             problem_text=problem.text,
             solution_steps=solution_steps,

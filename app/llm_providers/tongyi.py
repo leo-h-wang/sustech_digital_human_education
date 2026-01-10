@@ -17,7 +17,8 @@ from app.utils.validation import (
     validate_narration_steps,
     try_fix_json_response,
     sanitize_solution_step,
-    sanitize_narration_step
+    sanitize_narration_step,
+    _fix_json_escape_sequences
 )
 
 
@@ -241,26 +242,39 @@ class TongyiClient(LLMClient):
             pass
         
         # 如果 JSON 解析失败，尝试按行解析
+        import re
         lines = response_text.split('\n')
         steps = []
         current_step = None
+        
+        # 更精确的步骤检测模式，避免匹配 JSON 字段名如 "step_index"
+        step_patterns = [
+            r'^[\*\s]*步骤\s*(\d+)',          # 步骤1, **步骤 1
+            r'^[\*\s]*[Ss]tep\s+(\d+)',        # Step 1, step 1（后面必须有空格）
+            r'^[\*\s]*第\s*(\d+)\s*步',        # 第1步, 第 1 步
+            r'^[\*\s]*(\d+)\s*[\.、：:]\s*\S',  # 1. xxx, 1、xxx, 1：xxx
+        ]
         
         for line in lines:
             line = line.strip()
             if not line:
                 continue
             
-            # 检测步骤开始（如 "步骤1:", "Step 1:", "1." 等）
-            if any(marker in line.lower() for marker in ['步骤', 'step', '第']) and any(c.isdigit() for c in line):
+            # 跳过 JSON 结构行
+            if line.startswith('"') or line.startswith('{') or line.startswith('[') or line.startswith('}') or line.startswith(']'):
+                continue
+            
+            # 检测步骤开始
+            step_num = None
+            for pattern in step_patterns:
+                match = re.match(pattern, line)
+                if match:
+                    step_num = int(match.group(1))
+                    break
+            
+            if step_num:
                 if current_step:
                     steps.append(current_step)
-                
-                # 提取步骤号
-                step_num = 1
-                for char in line:
-                    if char.isdigit():
-                        step_num = int(char)
-                        break
                 
                 current_step = SolutionStep(
                     step_index=step_num,
@@ -277,14 +291,42 @@ class TongyiClient(LLMClient):
         if current_step:
             steps.append(current_step)
         
-        # 如果仍然没有步骤，创建一个默认步骤
+        # 如果仍然没有步骤
         if not steps:
-            steps.append(SolutionStep(
-                step_index=1,
-                title="解题过程",
-                description=response_text,
-                formula_latex=None
-            ))
+            # 检查响应是否看起来像 JSON（但解析失败了）
+            stripped_response = response_text.strip()
+            if stripped_response.startswith('[') and stripped_response.endswith(']'):
+                # 响应看起来像 JSON 数组，尝试最后的手段：逐个提取 JSON 对象
+                logger.warning(f"   ⚠️  JSON 解析失败，尝试逐个提取对象...")
+                try:
+                    # 使用更宽松的方法：匹配每个完整的 JSON 对象
+                    import re
+                    object_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+                    objects = re.findall(object_pattern, stripped_response)
+                    for i, obj_str in enumerate(objects):
+                        try:
+                            # 尝试修复并解析单个对象
+                            fixed_obj = _fix_json_escape_sequences(obj_str)
+                            obj = json.loads(fixed_obj)
+                            if isinstance(obj, dict) and 'step_index' in obj:
+                                sanitized = sanitize_solution_step(obj)
+                                steps.append(SolutionStep(**sanitized))
+                        except:
+                            continue
+                    if steps:
+                        logger.info(f"   ✅ 通过逐个提取，成功获取 {len(steps)} 个步骤")
+                except Exception as e:
+                    logger.warning(f"   ⚠️  逐个提取也失败: {e}")
+            
+            # 如果还是没有步骤，创建默认步骤
+            if not steps:
+                logger.warning(f"   ⚠️  所有解析方法都失败，创建默认步骤")
+                steps.append(SolutionStep(
+                    step_index=1,
+                    title="解题过程",
+                    description=response_text,
+                    formula_latex=None
+                ))
         
         return steps
     
@@ -318,8 +360,14 @@ class TongyiClient(LLMClient):
         logger.info("🎙️  开始生成讲解脚本")
         logger.info(f"   解题步骤数: {len(solution_steps)}")
         
+        # 根据步骤数量动态调整token数：每个步骤预留~800 tokens，最少6000
+        num_steps = len(solution_steps)
+        estimated_tokens = max(6000, num_steps * 800 + 2000)
+        max_tokens = min(estimated_tokens, 16000)  # 不超过16000
+        logger.info(f"   预计需要 ~{estimated_tokens} tokens，设置 max_tokens={max_tokens}")
+        
         prompt = get_narration_prompt(problem_text, solution_steps, meta or {})
-        response = self._call_api(prompt, temperature=0.7, max_tokens=3000)
+        response = self._call_api(prompt, temperature=0.7, max_tokens=max_tokens)
         
         logger.info("📊 开始解析讲解步骤...")
         narration_steps = self._parse_narration_steps(response, len(solution_steps))
@@ -330,44 +378,78 @@ class TongyiClient(LLMClient):
     
     def _parse_narration_steps(self, response_text: str, expected_steps: int) -> List[NarrationStep]:
         """解析讲解步骤"""
-        steps = []
+        import re
+        
+        # 使用更精确的正则表达式模式来匹配步骤开始
+        # 匹配: "步骤1", "步骤 1", "Step 1", "step1", "第1步", "**1：", "**1:", "1：", "1:"（行首）
+        step_pattern = re.compile(
+            r'^(?:'
+            r'\*{0,2}\s*步骤\s*(\d+)'  # 步骤1, **步骤 1
+            r'|'
+            r'\*{0,2}\s*[Ss]tep\s*(\d+)'  # Step 1, **step1
+            r'|'
+            r'\*{0,2}\s*第\s*(\d+)\s*步'  # 第1步, **第 1 步
+            r'|'
+            r'\*{2,}\s*(\d+)\s*[：:]'  # **1：, **1:
+            r'|'
+            r'^(\d+)\s*[：:]\s*\S'  # 1：标题, 1: title（行首，后面必须有内容）
+            r')'
+        )
+        
+        steps_dict = {}  # 用字典按 step_index 合并内容
         lines = response_text.split('\n')
-        current_step = None
+        current_step_index = None
         
         for line in lines:
             line = line.strip()
-            if not line:
+            if not line or line == '---':  # 跳过空行和分隔符
                 continue
             
-            # 检测步骤开始
-            if any(marker in line.lower() for marker in ['步骤', 'step', '第']):
-                if current_step:
-                    steps.append(current_step)
-                
-                step_num = 1
-                for char in line:
-                    if char.isdigit():
-                        step_num = int(char)
+            # 尝试匹配步骤开始
+            match = step_pattern.match(line)
+            if match:
+                # 提取步骤号（从多个捕获组中获取非空的那个）
+                step_num = None
+                for group in match.groups():
+                    if group:
+                        step_num = int(group)
                         break
                 
-                # 提取步骤文本（去掉标记）
-                narration_text = line
-                for marker in ['步骤', 'Step', '第', ':']:
-                    narration_text = narration_text.replace(marker, '').strip()
-                
+                if step_num:
+                    current_step_index = step_num
+                    
+                    # 提取标记后的文本作为讲解内容的开始
+                    remaining_text = line[match.end():].strip()
+                    # 清理开头的标点符号
+                    remaining_text = re.sub(r'^[：:：\s]+', '', remaining_text).strip()
+                    
+                    if current_step_index not in steps_dict:
+                        steps_dict[current_step_index] = []
+                    
+                    if remaining_text:
+                        steps_dict[current_step_index].append(remaining_text)
+                    continue
+            
+            # 非步骤标记行，追加到当前步骤
+            if current_step_index is not None:
+                if current_step_index not in steps_dict:
+                    steps_dict[current_step_index] = []
+                steps_dict[current_step_index].append(line)
+        
+        # 将字典转换为列表，并合并每个步骤的所有文本
+        steps = []
+        for step_index in sorted(steps_dict.keys()):
+            narration_text = ' '.join(steps_dict[step_index])
+            # 清理多余的空格和分隔符
+            narration_text = re.sub(r'\s*---\s*', ' ', narration_text)
+            narration_text = re.sub(r'\s+', ' ', narration_text).strip()
+            
+            if narration_text:
                 sanitized = sanitize_narration_step({
-                    "step_index": step_num,
+                    "step_index": step_index,
                     "narration_text": narration_text
                 })
-                current_step = NarrationStep(**sanitized)
-            elif current_step:
-                if current_step.narration_text and not current_step.narration_text.startswith('步骤'):
-                    current_step.narration_text += " " + line
-                else:
-                    current_step.narration_text = line
-        
-        if current_step:
-            steps.append(current_step)
+                steps.append(NarrationStep(**sanitized))
         
         # 如果解析失败，按段落分割
         if not steps:
@@ -380,8 +462,8 @@ class TongyiClient(LLMClient):
                 steps.append(NarrationStep(**sanitized))
         
         # 验证结果
-        steps_dict = [s.dict() for s in steps]
-        is_valid, error_msg = validate_narration_steps(steps_dict)
+        steps_dict_list = [s.dict() for s in steps]
+        is_valid, error_msg = validate_narration_steps(steps_dict_list)
         if not is_valid:
             # 如果验证失败，至少返回清理后的步骤
             steps = [NarrationStep(**sanitize_narration_step(s.dict())) for s in steps]
