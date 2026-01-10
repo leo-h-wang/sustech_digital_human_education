@@ -137,22 +137,6 @@ class GeminiClient(LLMClient):
             time.sleep(wait_time)
         
         start_time = datetime.now()
-#region agent log
-        try:
-            import json, time as _t
-            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                _f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "timeout-run",
-                    "hypothesisId": "T1",
-                    "location": "gemini._call_api:start",
-                    "message": "call start",
-                    "data": {"call_id": call_id, "model": self.model, "timeout": actual_timeout, "max_tokens": max_tokens},
-                    "timestamp": int(_t.time()*1000)
-                }) + "\n")
-        except Exception:
-            pass
-#endregion
         
         # 重试机制（带指数退避）
         last_exception = None
@@ -161,22 +145,6 @@ class GeminiClient(LLMClient):
                 with httpx.Client(timeout=actual_timeout) as client:
                     response = client.post(url, params=params, json=payload)
                     self.last_request_time = time.time()  # 更新最后请求时间
-#region agent log
-                try:
-                    import json, time as _t
-                    with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                        _f.write(json.dumps({
-                            "sessionId": "debug-session",
-                            "runId": "timeout-run",
-                            "hypothesisId": "T1",
-                            "location": "gemini._call_api:attempt",
-                            "message": "response received",
-                            "data": {"attempt": attempt + 1, "status": response.status_code, "elapsed": (datetime.now() - start_time).total_seconds()},
-                            "timestamp": int(_t.time() * 1000)
-                        }) + "\n")
-                except Exception:
-                    pass
-#endregion
                 
                 # 检查 HTTP 状态码
                 if response.status_code != 200:
@@ -278,22 +246,6 @@ class GeminiClient(LLMClient):
             except httpx.TimeoutException:
                 elapsed = (datetime.now() - start_time).total_seconds()
                 logger.error(f"❌ [调用 {call_id}] API 请求超时（{actual_timeout}秒，已用时 {elapsed:.2f}秒）")
-#region agent log
-                try:
-                    import json, time as _t
-                    with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                        _f.write(json.dumps({
-                            "sessionId": "debug-session",
-                            "runId": "timeout-run",
-                            "hypothesisId": "T1",
-                            "location": "gemini._call_api:timeout",
-                            "message": "timeout",
-                            "data": {"attempt": attempt + 1, "elapsed": elapsed, "timeout": actual_timeout},
-                            "timestamp": int(_t.time() * 1000)
-                        }) + "\n")
-                except Exception:
-                    pass
-#endregion
                 if attempt >= self.max_retries:
                     raise TimeoutError(f"API 请求超时（{actual_timeout}秒）")
                 # 超时也可以重试

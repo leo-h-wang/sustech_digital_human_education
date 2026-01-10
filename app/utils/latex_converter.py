@@ -26,28 +26,6 @@ def process_text_with_latex(text: str) -> str:
     """
     if not text or not text.strip():
         return ""
-
-    # #region agent log
-    try:
-        import json, time as _t
-        with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({
-                "sessionId": "debug-session",
-                "runId": "formula-debug",
-                "hypothesisId": "TX1",
-                "location": "latex_converter.process_text_with_latex:entry",
-                "message": "entry",
-                "data": {
-                    "len": len(text),
-                    "has_text_cmd": ("\\text{" in text),
-                    "text_cmd_count": text.count("\\text{"),
-                    "head": text[:220],
-                },
-                "timestamp": int(_t.time()*1000)
-            }) + "\n")
-    except Exception:
-        pass
-    # #endregion
     
     # 首先处理换行符
     text = text.replace('\\n', '\n')
@@ -84,27 +62,6 @@ def process_text_with_latex(text: str) -> str:
     # 这类 \text{} 不在 $...$ / $$...$$ 中时，不会进入 latex_to_mathml，需在这里降级为纯文本。
     # 注意：只处理无嵌套花括号的常见情况，避免错误吞噬复杂结构。
     text = re.sub(r'\\text\s*\{([^{}]*)\}', r'\1', text)
-
-    # #region agent log
-    try:
-        import json, time as _t
-        with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({
-                "sessionId": "debug-session",
-                "runId": "formula-debug",
-                "hypothesisId": "TX2",
-                "location": "latex_converter.process_text_with_latex:after_math_delims",
-                "message": "after math delimiter conversion",
-                "data": {
-                    "has_text_cmd": ("\\text{" in text),
-                    "text_cmd_count": text.count("\\text{"),
-                    "snippet": text[:220],
-                },
-                "timestamp": int(_t.time()*1000)
-            }) + "\n")
-    except Exception:
-        pass
-    # #endregion
     
     # 处理无分隔符的裸 LaTeX 公式（检测常见的 LaTeX 命令）
     text = _process_bare_latex(text)
@@ -114,27 +71,6 @@ def process_text_with_latex(text: str) -> str:
 
     # 将剩余的换行符转换为 <br>
     text = text.replace('\n', '<br>\n')
-
-    # #region agent log
-    try:
-        import json, time as _t
-        with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({
-                "sessionId": "debug-session",
-                "runId": "formula-debug",
-                "hypothesisId": "TX3",
-                "location": "latex_converter.process_text_with_latex:exit",
-                "message": "exit",
-                "data": {
-                    "has_text_cmd": ("\\text{" in text),
-                    "text_cmd_count": text.count("\\text{"),
-                    "tail": text[-220:],
-                },
-                "timestamp": int(_t.time()*1000)
-            }) + "\n")
-    except Exception:
-        pass
-    # #endregion
     
     return text
 
@@ -173,22 +109,6 @@ def _process_bare_latex(text: str) -> str:
         and ('$' not in stripped)
         and ('\n' not in stripped)
     ):
-        # #region agent log
-        try:
-            import json, time as _t
-            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                _f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "formula-debug",
-                    "hypothesisId": "BL0",
-                    "location": "latex_converter._process_bare_latex:whole_line",
-                    "message": "convert whole line (primarily latex)",
-                    "data": {"head": stripped[:180]},
-                    "timestamp": int(_t.time()*1000)
-                }) + "\n")
-        except Exception:
-            pass
-        # #endregion
         try:
             mathml = latex_to_mathml(stripped, display_block=True)
             if mathml and '<math' in mathml:
@@ -226,22 +146,6 @@ def _process_bare_latex(text: str) -> str:
     prefix = text[:start]
     coeff_match = re.search(r'([+\-]?\s*\d+(?:\.\d+)?)\s*$', prefix)
     if coeff_match:
-        # #region agent log
-        try:
-            import json, time as _t
-            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                _f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "formula-debug",
-                    "hypothesisId": "F4",
-                    "location": "latex_converter._process_bare_latex:merge_coeff",
-                    "message": "merged numeric coeff into latex_part",
-                    "data": {"prefix_tail": prefix[max(0, len(prefix)-30):], "coeff": coeff_match.group(1)},
-                    "timestamp": int(_t.time()*1000)
-                }) + "\n")
-        except Exception:
-            pass
-        # #endregion
         start = coeff_match.start()
         prefix = text[:start]
     # 只把“当前行/片段”的 LaTeX 转掉，避免把后续已经转换出的 <math> 或原始 $...$ 一并送进 convert()
@@ -367,22 +271,6 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
         
         # 预处理 LaTeX 命令
         latex_clean = _preprocess_latex(latex_clean)
-#region agent log
-        try:
-            import json, time as _t
-            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                _f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "formula-debug",
-                    "hypothesisId": "F3",
-                    "location": "latex_converter.latex_to_mathml:pre_convert",
-                    "message": "cleaned latex",
-                    "data": {"src": latex_clean[:200], "display_block": display_block},
-                    "timestamp": int(_t.time()*1000)
-                }) + "\n")
-        except Exception:
-            pass
-#endregion
         
         # 转换为 MathML（不需要添加美元符号，直接传递纯LaTeX）
         mathml = convert(latex_clean)
@@ -398,23 +286,6 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
             else:
                 # 行内显示
                 mathml = mathml.replace('<math', '<math display="inline" style="font-size: 16px; vertical-align: middle;"', 1)
-
-        # #region agent log
-        try:
-            import json, time as _t
-            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                _f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "formula-debug",
-                    "hypothesisId": "F5",
-                    "location": "latex_converter.latex_to_mathml:post_convert",
-                    "message": "mathml head",
-                    "data": {"head": mathml[:160], "display_block": display_block},
-                    "timestamp": int(_t.time()*1000)
-                }) + "\n")
-        except Exception:
-            pass
-        # #endregion
         
         return mathml
         

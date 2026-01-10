@@ -275,53 +275,12 @@ def generate_slides_html_with_formulas(
     """
     # 处理题目文本中的 LaTeX 公式
     processed_problem_text = process_text_with_latex(problem_text)
-    # #region agent log
-    try:
-        import json, time
-        with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-            _f.write(json.dumps({
-                "sessionId": "debug-session",
-                "runId": "formula-debug",
-                "hypothesisId": "H1",
-                "location": "generator.generate_slides_html_with_formulas:problem_text",
-                "message": "problem_text processed",
-                "data": {"raw": (problem_text or "")[:180], "processed": (processed_problem_text or "")[:180]},
-                "timestamp": int(time.time()*1000)
-            }) + "\n")
-    except Exception:
-        pass
-    # #endregion
     
     # 合并步骤信息并转换公式
     slides = []
     for i, step in enumerate(solution_steps):
         # 处理标题中的 LaTeX 公式（行内显示）
         processed_title = process_text_with_latex(step.title) if step.title else ""
-        # #region agent log
-        try:
-            import json, time
-            with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                _f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "formula-debug",
-                    "hypothesisId": "TTitle1",
-                    "location": "generator.generate_slides_html_with_formulas:before_title",
-                    "message": "raw title",
-                    "data": {"step": step.step_index, "raw": step.title[:180] if step.title else ""},
-                    "timestamp": int(time.time()*1000)
-                }) + "\n")
-                _f.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "formula-debug",
-                    "hypothesisId": "TTitle2",
-                    "location": "generator.generate_slides_html_with_formulas:after_title",
-                    "message": "processed title",
-                    "data": {"step": step.step_index, "processed": processed_title[:180]},
-                    "timestamp": int(time.time()*1000)
-                }) + "\n")
-        except Exception:
-            pass
-        # #endregion
 
         # 处理 description 中的 LaTeX 公式
         processed_description = None
@@ -332,39 +291,7 @@ def generate_slides_html_with_formulas(
         formula_mathml = None
         if step.formula_latex:
             logger.info(f"转换步骤 {step.step_index} 的公式: {step.formula_latex[:50]}...")
-            # #region agent log
-            try:
-                import json, time
-                with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                    _f.write(json.dumps({
-                        "sessionId": "debug-session",
-                        "runId": "formula-debug",
-                        "hypothesisId": "F1",
-                        "location": "generator.generate_slides_html_with_formulas:before_formula",
-                        "message": "raw formula_latex",
-                        "data": {"step": step.step_index, "title": step.title, "raw": step.formula_latex[:180]},
-                        "timestamp": int(time.time()*1000)
-                    }) + "\n")
-            except Exception:
-                pass
-            # #endregion
             formula_mathml = process_text_with_latex(step.formula_latex)
-            # #region agent log
-            try:
-                import json, time
-                with open(r"e:\sustech_digital_human_education\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                    _f.write(json.dumps({
-                        "sessionId": "debug-session",
-                        "runId": "formula-debug",
-                        "hypothesisId": "F2",
-                        "location": "generator.generate_slides_html_with_formulas:after_formula",
-                        "message": "processed formula_mathml snippet",
-                        "data": {"step": step.step_index, "processed": (formula_mathml or "")[:180]},
-                        "timestamp": int(time.time()*1000)
-                    }) + "\n")
-            except Exception:
-                pass
-            # #endregion
         
         slide_data = {
             "step_index": step.step_index,
