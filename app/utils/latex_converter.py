@@ -92,6 +92,7 @@ def _process_bare_latex(text: str) -> str:
         r'\\neq', r'\\approx', r'\\equiv', r'\\subset', r'\\supset',
         r'\\in', r'\\notin', r'\\cup', r'\\cap', r'\\forall', r'\\exists',
         r'\\rightarrow', r'\\leftarrow', r'\\Rightarrow', r'\\Leftarrow',
+        r'\\left', r'\\right',
         r'\\begin\{', r'\\end\{',
     ]
     latex_pattern = '|'.join(latex_commands)
@@ -271,6 +272,27 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
         
         # 预处理 LaTeX 命令
         latex_clean = _preprocess_latex(latex_clean)
+
+        # 尝试将“等号链/推导”拆成多行（MathML 在 PDF/Chromium 中通常不会自动换行，会导致超宽裁切）
+        if display_block:
+            multiline_lines = _split_long_derivation_latex(latex_clean)
+            if multiline_lines and len(multiline_lines) > 1:
+                blocks: list[str] = []
+                for idx, line in enumerate(multiline_lines):
+                    try:
+                        m = convert(line)
+                        m = re.sub(r'\sdisplay="(?:inline|block)"', '', m, count=1)
+                        if m.startswith("<math"):
+                            m = m.replace(
+                                "<math",
+                                '<math display="block" style="margin: 8px auto; font-size: 18px;"',
+                                1,
+                            )
+                        blocks.append(m)
+                    except Exception:
+                        # 单行失败不影响整体，降级显示该行
+                        blocks.append(_fallback_latex_display(line, display_block=True))
+                return "\n".join(blocks)
         
         # 转换为 MathML（不需要添加美元符号，直接传递纯LaTeX）
         mathml = convert(latex_clean)
@@ -286,7 +308,7 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
             else:
                 # 行内显示
                 mathml = mathml.replace('<math', '<math display="inline" style="font-size: 16px; vertical-align: middle;"', 1)
-        
+
         return mathml
         
     except ImportError as e:
@@ -315,6 +337,39 @@ def _fallback_latex_display(latex_str: str, display_block: bool = True) -> str:
         return f'<div style="{style_block}">{escaped}</div>'
     else:
         return f'<code style="{style_inline}">{escaped}</code>'
+
+
+def _split_long_derivation_latex(latex_clean: str) -> list[str]:
+    """
+    将长推导/等号链拆成多行 LaTeX（每行会单独转换为一个 MathML block）。
+    目的：避免 Chromium/PDF 中 MathML 不自动换行导致“公式超行被裁切”。
+    """
+    if not latex_clean:
+        return []
+    s = latex_clean.strip()
+
+    # 避免处理包含环境的复杂 LaTeX（目前 latex2mathml 对 begin/end 支持不稳定）
+    if "\\begin{" in s or "\\end{" in s:
+        return [s]
+
+    # 优先按显式换行拆分（对齐/推导常用）
+    if "\\\\" in s:
+        parts = [p.strip() for p in re.split(r"\\\\(?![a-zA-Z])", s) if p.strip()]
+        return parts if len(parts) > 1 else [s]
+
+    # 其次按等号链拆分（A = B = C = ...）
+    if s.count("=") >= 2 and len(s) >= 160:
+        toks = [t.strip() for t in s.split("=")]
+        toks = [t for t in toks if t != ""]
+        if len(toks) >= 3:
+            lines: list[str] = []
+            lines.append(f"{toks[0]} = {toks[1]}")
+            for t in toks[2:]:
+                # 用前导等号表达“同一行继续推导”
+                lines.append(f"= {t}")
+            return lines
+
+    return [s]
 
 
 def batch_convert_latex(formulas: list[str]) -> list[str]:
