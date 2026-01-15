@@ -199,6 +199,9 @@
             <a id="downloadLink" href="#" download style="display: none;">
                 <button class="btn" style="margin-top: 20px;">📥 下载 PDF 课件</button>
             </a>
+            <a id="downloadNarrationLink" href="#" download style="display: none;">
+                <button class="btn" style="margin-top: 10px; background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);">📝 下载解说词 TXT</button>
+            </a>
         </div>
     </div>
     
@@ -212,12 +215,14 @@
             const resultSection = document.getElementById('resultSection');
             const resultContent = document.getElementById('resultContent');
             const downloadLink = document.getElementById('downloadLink');
+            const downloadNarrationLink = document.getElementById('downloadNarrationLink');
             
             // 重置状态
             submitBtn.disabled = true;
             loading.classList.add('show');
             error.classList.remove('show');
             resultSection.classList.remove('show');
+            downloadNarrationLink.style.display = 'none';
             
             const problemText = document.getElementById('problemText').value;
             const topic = document.getElementById('topic').value;
@@ -249,8 +254,16 @@
                 downloadLink.download = `problem_${new Date().getTime()}.pdf`;
                 downloadLink.style.display = 'block';
                 
+                // 获取 narration timestamp（用于下载 txt）
+                const narrationTimestamp = response.headers.get('X-Narration-Timestamp');
+                if (narrationTimestamp) {
+                    downloadNarrationLink.href = `/api/download_narration/${narrationTimestamp}`;
+                    downloadNarrationLink.download = `narration_${narrationTimestamp}.txt`;
+                    downloadNarrationLink.style.display = 'block';
+                }
+                
                 // 显示成功信息
-                resultContent.innerHTML = '<p style="color: #27ae60; font-size: 18px;">✨ PDF 课件已生成成功！点击下方按钮下载。</p>';
+                resultContent.innerHTML = '<p style="color: #27ae60; font-size: 18px;">✨ PDF 课件和解说词已生成成功！点击下方按钮下载。</p>';
                 resultSection.classList.add('show');
                 
             } catch (err) {

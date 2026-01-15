@@ -1,10 +1,11 @@
 """API 路由"""
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import StreamingResponse, HTMLResponse
-from typing import List
+from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse, Response
+from typing import List, Dict
 import os
 from datetime import datetime
 import json
+from pathlib import Path
 
 from app.models.schemas import (
     ProblemInput,
@@ -125,13 +126,99 @@ async def generate_pdf_endpoint(request: PDFGenerationRequest):
         raise HTTPException(status_code=500, detail=f"生成PDF失败: {str(e)}")
 
 
+def align_narration_to_solution(
+    solution_steps: List,
+    narration_steps: List,
+) -> Dict[int, str]:
+    """
+    将讲解步骤对齐到解题步骤的 step_index
+    
+    Args:
+        solution_steps: 解题步骤列表
+        narration_steps: 讲解步骤列表（可能缺失、重复或乱序）
+        
+    Returns:
+        字典 {step_index: aligned_narration_text}
+    """
+    from app.models.schemas import SolutionStep, NarrationStep
+    
+    # 构建 narration 的索引字典
+    narration_dict = {}
+    for narr in narration_steps:
+        step_idx = narr.step_index
+        if step_idx not in narration_dict:
+            narration_dict[step_idx] = []
+        narration_dict[step_idx].append(narr.narration_text)
+    
+    # 按 solution_steps 顺序对齐
+    aligned = {}
+    for step in solution_steps:
+        step_idx = step.step_index
+        if step_idx in narration_dict:
+            # 合并同一 step_index 的多条讲解（用双换行分隔）
+            aligned[step_idx] = '\n\n'.join(narration_dict[step_idx])
+        else:
+            # 缺失时用解题描述兜底（已经过 TTS 处理）
+            aligned[step_idx] = convert_to_tts_friendly(step.description or step.title)
+    
+    return aligned
+
+
+def save_narration_txt(
+    timestamp: str,
+    solution_steps: List,
+    narration_steps: List,
+) -> str:
+    """
+    将对齐后的讲解保存为 txt 文件
+    
+    Args:
+        timestamp: 时间戳（用于文件命名）
+        solution_steps: 解题步骤列表
+        narration_steps: 讲解步骤列表
+        
+    Returns:
+        保存的文件路径
+    """
+    os.makedirs("problems", exist_ok=True)
+    
+    filename = f"problems/problem_{timestamp}_narration.txt"
+    
+    # 对齐讲解到解题步骤
+    aligned_narration = align_narration_to_solution(solution_steps, narration_steps)
+    
+    # 构建 txt 内容
+    lines = []
+    lines.append("=" * 80)
+    lines.append("高等数学题目讲解脚本")
+    lines.append(f"生成时间: {timestamp}")
+    lines.append("=" * 80)
+    lines.append("")
+    
+    for step in solution_steps:
+        step_idx = step.step_index
+        lines.append(f"【步骤 {step_idx}】{step.title}")
+        lines.append("")
+        if step_idx in aligned_narration:
+            lines.append(aligned_narration[step_idx])
+        lines.append("")
+        lines.append("-" * 80)
+        lines.append("")
+    
+    # 写入文件（UTF-8 编码）
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+    
+    return filename
+
+
 @router.post("/full_pipeline")
 async def full_pipeline(
     problem: ProblemInput,
     llm_client: LLMClient = Depends(get_llm_client)
 ):
     """
-    完整流水线接口：一键完成解题、生成讲解、生成PDF
+    完整流水线接口：一键完成解题、生成讲解、生成PDF、导出讲解txt
     """
     try:
         # 基本输入验证
@@ -140,6 +227,9 @@ async def full_pipeline(
         
         # 清理题目文本
         cleaned_text = clean_problem_text(problem.text)
+        
+        # 生成统一的时间戳（用于文件命名）
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # 步骤1：解题
         meta = {
@@ -171,32 +261,44 @@ async def full_pipeline(
         except TimeoutError as e:
             raise HTTPException(status_code=504, detail=f"讲解生成超时: {str(e)}")
         
-        # 应用 TTS 友好转换
+        # 应用 TTS 友好转换（去除 Markdown + 数学符号口语化）
         for step in narration_steps:
             step.narration_text = convert_to_tts_friendly(step.narration_text)
         
-        # 步骤3：生成 PDF
+        # 步骤3：保存讲解 txt（按 step_index 对齐）
+        try:
+            save_narration_txt(timestamp, solution_steps, narration_steps)
+        except Exception as e:
+            # 记录保存失败不影响主流程，但记录警告
+            import logging
+            logging.warning(f"保存讲解 txt 失败: {e}")
+        
+        # 步骤4：生成 PDF（不包含 narration）
         try:
             pdf_bytes = await generate_pdf_async(
                 problem_text=cleaned_text,
                 solution_steps=solution_steps,
-                narration_steps=narration_steps
+                narration_steps=None  # 明确传 None，不渲染 narration
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"PDF 生成失败: {str(e)}")
         
-        # 保存题目记录（可选）
+        # 步骤5：保存题目记录（JSON）
         try:
-            save_problem_record(cleaned_text, solution_steps, narration_steps, meta)
+            save_problem_record_with_timestamp(
+                timestamp, cleaned_text, solution_steps, narration_steps, meta
+            )
         except Exception:
             # 记录保存失败不影响主流程
             pass
         
+        # 返回 PDF，并在响应头中携带 timestamp
         return StreamingResponse(
             pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename=problem_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                "Content-Disposition": f"attachment; filename=problem_{timestamp}.pdf",
+                "X-Narration-Timestamp": timestamp  # 前端用此 timestamp 下载 txt
             }
         )
     except HTTPException:
@@ -234,8 +336,9 @@ def _process_single_problem(
             narration_steps=narration_steps
         )
         
-        # 保存记录
-        save_problem_record(problem.text, solution_steps, narration_steps, meta)
+        # 保存记录（生成新的 timestamp）
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_problem_record_with_timestamp(timestamp, problem.text, solution_steps, narration_steps, meta)
         
         return {
             "problem_text": problem.text,
@@ -250,6 +353,46 @@ def _process_single_problem(
             "error": str(e),
             "success": False
         }
+
+
+@router.get("/download_narration/{timestamp}")
+async def download_narration(timestamp: str):
+    """
+    下载讲解脚本 txt 文件
+    
+    Args:
+        timestamp: 题目生成时的时间戳（格式：YYYYMMDD_HHMMSS）
+        
+    Returns:
+        讲解脚本 txt 文件
+    """
+    try:
+        # 验证 timestamp 格式（防止路径遍历攻击）
+        import re
+        if not re.match(r'^\d{8}_\d{6}$', timestamp):
+            raise HTTPException(status_code=400, detail="无效的时间戳格式")
+        
+        # 构建文件路径
+        filename = f"problems/problem_{timestamp}_narration.txt"
+        filepath = Path(filename)
+        
+        # 检查文件是否存在
+        if not filepath.exists():
+            raise HTTPException(status_code=404, detail="讲解脚本文件不存在")
+        
+        # 返回文件下载
+        return FileResponse(
+            path=str(filepath),
+            media_type="text/plain; charset=utf-8",
+            filename=f"narration_{timestamp}.txt",
+            headers={
+                "Content-Disposition": f"attachment; filename=narration_{timestamp}.txt"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"下载讲解脚本失败: {str(e)}")
 
 
 @router.post("/batch_full_pipeline")
@@ -337,10 +480,21 @@ def save_problem_record(
     narration_steps: List,
     meta: dict
 ):
-    """保存题目记录到本地文件"""
+    """保存题目记录到本地文件（自动生成 timestamp）"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_problem_record_with_timestamp(timestamp, problem_text, solution_steps, narration_steps, meta)
+
+
+def save_problem_record_with_timestamp(
+    timestamp: str,
+    problem_text: str,
+    solution_steps: List,
+    narration_steps: List,
+    meta: dict
+):
+    """保存题目记录到本地文件（使用指定的 timestamp）"""
     os.makedirs("problems", exist_ok=True)
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"problems/problem_{timestamp}.json"
     
     record = {

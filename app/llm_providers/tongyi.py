@@ -377,8 +377,56 @@ class TongyiClient(LLMClient):
         return narration_steps
     
     def _parse_narration_steps(self, response_text: str, expected_steps: int) -> List[NarrationStep]:
-        """解析讲解步骤"""
+        """解析讲解步骤（优先 JSON，失败回退文本解析）"""
         import re
+        
+        logger.info(f"   📊 开始解析讲解步骤...")
+        logger.info(f"   原始响应长度: {len(response_text)} 字符")
+        logger.debug(f"   原始响应预览: {response_text[:500]}...")
+        
+        # 优先尝试 JSON 解析
+        try:
+            # 清理响应：移除可能的 markdown 代码块标记
+            cleaned_response = response_text.strip()
+            if cleaned_response.startswith('```'):
+                lines = cleaned_response.split('\n')
+                if lines[0].startswith('```'):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == '```':
+                    lines = lines[:-1]
+                cleaned_response = '\n'.join(lines)
+                logger.debug(f"   清理 markdown 标记后的响应: {cleaned_response[:500]}...")
+            
+            # 尝试使用验证工具修复并解析
+            fixed_data = try_fix_json_response(cleaned_response)
+            if fixed_data:
+                logger.info(f"   ✅ 成功提取 JSON 数组，包含 {len(fixed_data)} 个讲解步骤")
+                # 验证格式
+                is_valid, error_msg = validate_narration_steps(fixed_data)
+                if is_valid:
+                    steps = []
+                    for item in fixed_data:
+                        sanitized = sanitize_narration_step(item)
+                        steps.append(NarrationStep(**sanitized))
+                    logger.info(f"   ✅ JSON 验证通过，返回 {len(steps)} 个步骤")
+                    return steps
+                else:
+                    logger.warning(f"   ⚠️  JSON 格式验证失败: {error_msg}，尝试清理后重试")
+                    # 即使验证失败，也尝试清理后使用
+                    steps = []
+                    for item in fixed_data:
+                        sanitized = sanitize_narration_step(item)
+                        steps.append(NarrationStep(**sanitized))
+                    if steps:
+                        logger.info(f"   ✅ 清理后返回 {len(steps)} 个步骤")
+                        return steps
+            else:
+                logger.warning(f"   ⚠️  try_fix_json_response 返回 None，尝试文本解析")
+        except Exception as e:
+            logger.warning(f"   JSON 解析异常: {e}，回退到文本解析")
+        
+        # 回退到文本解析模式
+        logger.info(f"   📝 使用文本模式解析讲解步骤...")
         
         # 使用更精确的正则表达式模式来匹配步骤开始
         # 匹配: "步骤1", "步骤 1", "Step 1", "step1", "第1步", "**1：", "**1:", "1：", "1:"（行首）

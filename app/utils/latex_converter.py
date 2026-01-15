@@ -24,6 +24,9 @@ def process_text_with_latex(text: str) -> str:
     Returns:
         HTML 字符串，其中 LaTeX 已转换为 MathML
     """
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:process_text_with_latex:entry", "message": "process_text_with_latex called", "data": {"text_len": len(text) if text else 0, "text_preview": text[:200] if text else ""}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B,C,D"}) + '\n')
+    # #endregion
     if not text or not text.strip():
         return ""
     
@@ -202,6 +205,9 @@ def _preprocess_latex(latex_str: str) -> str:
     """
     预处理 LaTeX 字符串，将一些 latex2mathml 不支持的命令转换为支持的格式
     """
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:_preprocess_latex:entry", "message": "_preprocess_latex input", "data": {"latex_str_len": len(latex_str), "latex_str_preview": latex_str[:300], "has_text_cmd": r'\text{' in latex_str, "has_to_cmd": r'\to' in latex_str}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+    # #endregion
     # 对齐环境（aligned/align）需要保留换行与移除对齐锚点 '&'：
     # - 若把 '\\\\' 替换成空格，会把多行推导压成一行，PDF 中容易超宽被裁切
     # - 部分渲染器/版本会把 '&' 作为可见字符渲染（用户看到 '= 前多一个 &')
@@ -229,6 +235,9 @@ def _preprocess_latex(latex_str: str) -> str:
     latex_str = latex_str.replace('\\:', ' ')
     latex_str = latex_str.replace('\\!', '')
     
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:_preprocess_latex:exit", "message": "_preprocess_latex output", "data": {"result_len": len(latex_str), "result_preview": latex_str[:300]}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+    # #endregion
     return latex_str
 
 
@@ -243,6 +252,9 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
     Returns:
         MathML 格式的字符串，如果转换失败则返回带样式的纯文本
     """
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:latex_to_mathml:entry", "message": "latex_to_mathml called", "data": {"latex_str_len": len(latex_str) if latex_str else 0, "latex_str_preview": (latex_str[:200] if latex_str else ""), "display_block": display_block}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "C,D"}) + '\n')
+    # #endregion
     if not latex_str or not latex_str.strip():
         return ""
     
@@ -313,9 +325,15 @@ def latex_to_mathml(latex_str: str, display_block: bool = True) -> str:
         
     except ImportError as e:
         logger.error(f"latex2mathml 库未安装: {e}")
+        # #region agent log
+        import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:latex_to_mathml:import_error", "message": "latex2mathml import failed", "data": {"error": str(e)}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "C,D"}) + '\n')
+        # #endregion
         return _fallback_latex_display(latex_str, display_block)
     except Exception as e:
         logger.warning(f"LaTeX 转换为 MathML 失败: {latex_str[:50]}... 错误: {e}")
+        # #region agent log
+        import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:latex_to_mathml:exception", "message": "latex_to_mathml conversion failed", "data": {"error": str(e), "latex_preview": latex_str[:100]}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "C,D"}) + '\n')
+        # #endregion
         return _fallback_latex_display(latex_str, display_block)
 
 
@@ -330,6 +348,9 @@ def _fallback_latex_display(latex_str: str, display_block: bool = True) -> str:
     Returns:
         HTML 格式的字符串
     """
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:_fallback_latex_display", "message": "FALLBACK triggered - raw LaTeX will be shown", "data": {"latex_str_len": len(latex_str), "latex_str_preview": latex_str[:200], "display_block": display_block}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "C,D"}) + '\n')
+    # #endregion
     escaped = escape(latex_str)
     style_block = "background: #f5f5f5; padding: 12px; margin: 10px 0; border-left: 4px solid #ccc; font-family: 'Courier New', monospace; font-size: 15px; color: #333; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word;"
     style_inline = "background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-family: monospace;"
@@ -342,8 +363,11 @@ def _fallback_latex_display(latex_str: str, display_block: bool = True) -> str:
 def _split_long_derivation_latex(latex_clean: str) -> list[str]:
     """
     将长推导/等号链拆成多行 LaTeX（每行会单独转换为一个 MathML block）。
-    目的：避免 Chromium/PDF 中 MathML 不自动换行导致“公式超行被裁切”。
+    目的：避免 Chromium/PDF 中 MathML 不自动换行导致"公式超行被裁切"。
     """
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "latex_converter.py:_split_long_derivation_latex:entry", "message": "_split_long_derivation called", "data": {"input_len": len(latex_clean) if latex_clean else 0, "input_preview": (latex_clean[:200] if latex_clean else "")}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "C"}) + '\n')
+    # #endregion
     if not latex_clean:
         return []
     s = latex_clean.strip()

@@ -499,8 +499,80 @@ class GeminiClient(LLMClient):
         return narration_steps
     
     def _parse_narration_steps(self, response_text: str, expected_steps: int) -> List[NarrationStep]:
-        """解析讲解步骤"""
+        """解析讲解步骤（优先 JSON，失败回退文本解析）"""
         import re
+        
+        logger.info(f"   📊 开始解析讲解步骤...")
+        logger.info(f"   原始响应长度: {len(response_text)} 字符")
+        logger.debug(f"   原始响应预览: {response_text[:500]}...")
+        
+        # #region agent log
+        import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "gemini.py:_parse_narration_steps:entry", "message": "parse_narration called", "data": {"response_len": len(response_text), "response_preview": response_text[:500], "expected_steps": expected_steps}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B,C,D"}) + '\n')
+        # #endregion
+        
+        # 优先尝试 JSON 解析
+        try:
+            # 清理响应：移除可能的 markdown 代码块标记
+            cleaned_response = response_text.strip()
+            if cleaned_response.startswith('```'):
+                lines = cleaned_response.split('\n')
+                if lines[0].startswith('```'):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == '```':
+                    lines = lines[:-1]
+                cleaned_response = '\n'.join(lines)
+                logger.debug(f"   清理 markdown 标记后的响应: {cleaned_response[:500]}...")
+            
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "gemini.py:_parse_narration_steps:before_json_parse", "message": "cleaned response before JSON parse", "data": {"cleaned_len": len(cleaned_response), "cleaned_preview": cleaned_response[:300], "starts_with_bracket": cleaned_response.startswith('[')}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+            # #endregion
+            
+            # 尝试使用验证工具修复并解析
+            fixed_data = try_fix_json_response(cleaned_response)
+            
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "gemini.py:_parse_narration_steps:after_json_parse", "message": "try_fix_json_response result", "data": {"fixed_data_is_none": fixed_data is None, "fixed_data_len": len(fixed_data) if fixed_data else 0, "fixed_data_preview": str(fixed_data)[:500] if fixed_data else "None"}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+            # #endregion
+            
+            if fixed_data:
+                logger.info(f"   ✅ 成功提取 JSON 数组，包含 {len(fixed_data)} 个讲解步骤")
+                # 验证格式
+                is_valid, error_msg = validate_narration_steps(fixed_data)
+                
+                # #region agent log
+                import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "gemini.py:_parse_narration_steps:validation", "message": "validation result", "data": {"is_valid": is_valid, "error_msg": error_msg}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+                # #endregion
+                
+                if is_valid:
+                    steps = []
+                    for item in fixed_data:
+                        sanitized = sanitize_narration_step(item)
+                        steps.append(NarrationStep(**sanitized))
+                    logger.info(f"   ✅ JSON 验证通过，返回 {len(steps)} 个步骤")
+                    return steps
+                else:
+                    logger.warning(f"   ⚠️  JSON 格式验证失败: {error_msg}，尝试清理后重试")
+                    # 即使验证失败，也尝试清理后使用
+                    steps = []
+                    for item in fixed_data:
+                        sanitized = sanitize_narration_step(item)
+                        steps.append(NarrationStep(**sanitized))
+                    if steps:
+                        logger.info(f"   ✅ 清理后返回 {len(steps)} 个步骤")
+                        return steps
+            else:
+                logger.warning(f"   ⚠️  try_fix_json_response 返回 None，尝试文本解析")
+        except Exception as e:
+            logger.warning(f"   JSON 解析异常: {e}，回退到文本解析")
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "gemini.py:_parse_narration_steps:json_exception", "message": "JSON parsing exception", "data": {"error": str(e)}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+            # #endregion
+        
+        # 回退到文本解析模式
+        logger.info(f"   📝 使用文本模式解析讲解步骤...")
+        # #region agent log
+        import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "gemini.py:_parse_narration_steps:text_fallback", "message": "Falling back to text parsing mode", "data": {"response_preview": response_text[:300]}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "C,D"}) + '\n')
+        # #endregion
         
         # 使用更精确的正则表达式模式来匹配步骤开始
         # 匹配: "步骤1", "步骤 1", "Step 1", "step1", "第1步", "**1：", "**1:", "1：", "1:"（行首）
@@ -575,6 +647,9 @@ class GeminiClient(LLMClient):
         
         # 如果解析失败，按段落分割
         if not steps:
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "gemini.py:_parse_narration_steps:paragraph_fallback", "message": "Text parsing failed, falling back to paragraph split", "data": {"response_preview": response_text[:300]}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "C,D"}) + '\n')
+            # #endregion
             paragraphs = [p.strip() for p in response_text.split('\n\n') if p.strip()]
             for i, para in enumerate(paragraphs[:expected_steps], 1):
                 sanitized = sanitize_narration_step({

@@ -2,7 +2,7 @@
 from typing import List, Optional
 from jinja2 import Template
 from app.models.schemas import SolutionStep, NarrationStep
-from app.utils.latex_converter import latex_to_mathml, process_text_with_latex
+from app.utils.latex_converter import process_text_with_latex
 import logging
 
 logger = logging.getLogger(__name__)
@@ -137,18 +137,6 @@ SLIDE_TEMPLATE = """
                 white-space: normal;
             }
         }
-        .narration-text {
-            font-size: 24px;
-            line-height: 2;
-            color: #2c3e50;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-            max-width: 100%;
-            box-sizing: border-box;
-        }
         .step-number {
             display: inline-block;
             width: 40px;
@@ -187,12 +175,6 @@ SLIDE_TEMPLATE = """
             {{ slide.formula_mathml | safe }}
         </div>
         {% endif %}
-        
-        {% if slide.narration_text %}
-        <div class="narration-text">
-            {{ slide.narration_text }}
-        </div>
-        {% endif %}
     </div>
     {% endfor %}
 </body>
@@ -207,53 +189,35 @@ def generate_slides_html(
 ) -> str:
     """
     生成幻灯片 HTML（LaTeX 公式以纯文本显示，用于网页浏览）
-    
-    Args:
-        problem_text: 题目文本
-        solution_steps: 解题步骤列表
-        narration_steps: 讲解步骤列表（可选）
-        
-    Returns:
-        HTML 字符串
+
+    注意：narration_steps 参数保留以维持接口兼容，但不再渲染到 HTML 中
     """
-    # 合并步骤信息
+    # 合并步骤信息（不再包含 narration）
     slides = []
-    for i, step in enumerate(solution_steps):
+    for step in solution_steps:
         slide_data = {
             "step_index": step.step_index,
             "title": step.title,
             "description": step.description,
             "formula_mathml": step.formula_latex,  # 保持原LaTeX用于显示
-            "narration_text": None
         }
-        
-        # 如果有对应的讲解步骤，合并所有匹配的 narration_text
-        if narration_steps:
-            narration_texts = []
-            for narration in narration_steps:
-                if narration.step_index == step.step_index:
-                    narration_texts.append(narration.narration_text)
-            if narration_texts:
-                slide_data["narration_text"] = ' '.join(narration_texts)
-        
         slides.append(slide_data)
-    
-    # 如果没有讲解步骤，至少生成解题步骤的幻灯片
+
+    # 如果没有步骤，至少生成一个默认幻灯片
     if not slides:
         slides.append({
             "step_index": 1,
             "title": "题目解析",
             "description": "暂无详细步骤",
             "formula_mathml": None,
-            "narration_text": None
         })
-    
+
     template = Template(SLIDE_TEMPLATE)
     html = template.render(
         problem_text=problem_text,
         slides=slides
     )
-    
+
     return html
 
 
@@ -264,21 +228,15 @@ def generate_slides_html_with_formulas(
 ) -> str:
     """
     生成带有MathML渲染公式的幻灯片 HTML（用于PDF导出）
-    
-    Args:
-        problem_text: 题目文本
-        solution_steps: 解题步骤列表
-        narration_steps: 讲解步骤列表（可选）
-        
-    Returns:
-        HTML 字符串，其中LaTeX公式已转换为MathML
+
+    注意：narration_steps 参数保留以维持接口兼容，但不再渲染到 HTML 中
     """
     # 处理题目文本中的 LaTeX 公式
     processed_problem_text = process_text_with_latex(problem_text)
-    
-    # 合并步骤信息并转换公式
+
+    # 合并步骤信息并转换公式（不再包含 narration）
     slides = []
-    for i, step in enumerate(solution_steps):
+    for step in solution_steps:
         # 处理标题中的 LaTeX 公式（行内显示）
         processed_title = process_text_with_latex(step.title) if step.title else ""
 
@@ -286,47 +244,37 @@ def generate_slides_html_with_formulas(
         processed_description = None
         if step.description:
             processed_description = process_text_with_latex(step.description)
-        
+
         # 处理 formula_latex（可能包含换行和混合内容）
         formula_mathml = None
         if step.formula_latex:
             logger.info(f"转换步骤 {step.step_index} 的公式: {step.formula_latex[:50]}...")
             formula_mathml = process_text_with_latex(step.formula_latex)
-        
+
         slide_data = {
             "step_index": step.step_index,
             "title": processed_title,
             "description": processed_description,
             "formula_mathml": formula_mathml,
-            "narration_text": None
         }
-        
-        # 如果有对应的讲解步骤，合并所有匹配的 narration_text
-        if narration_steps:
-            narration_texts = []
-            for narration in narration_steps:
-                if narration.step_index == step.step_index:
-                    narration_texts.append(narration.narration_text)
-            if narration_texts:
-                slide_data["narration_text"] = ' '.join(narration_texts)
-        
+
         slides.append(slide_data)
-    
-    # 如果没有讲解步骤，至少生成解题步骤的幻灯片
+
+    # 如果没有步骤，至少生成一个默认幻灯片
     if not slides:
         slides.append({
             "step_index": 1,
             "title": "题目解析",
             "description": "暂无详细步骤",
             "formula_mathml": None,
-            "narration_text": None
         })
-    
+
     template = Template(SLIDE_TEMPLATE)
     html = template.render(
         problem_text=processed_problem_text,
         slides=slides
     )
-    
+
     return html
+
 

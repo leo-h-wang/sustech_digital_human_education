@@ -100,12 +100,21 @@ def try_fix_json_response(response_text: str) -> Optional[List[Dict]]:
     Returns:
         解析后的数据，如果失败返回 None
     """
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "validation.py:try_fix_json_response:entry", "message": "try_fix_json_response called", "data": {"response_len": len(response_text) if response_text else 0, "response_preview": (response_text[:300] if response_text else "")}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+    # #endregion
     # 首先尝试直接解析整个响应
     try:
         data = json.loads(response_text.strip())
         if isinstance(data, list) and len(data) > 0:
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "validation.py:try_fix_json_response:direct_parse_success", "message": "Direct JSON parse succeeded", "data": {"data_len": len(data), "first_item_keys": list(data[0].keys()) if data and isinstance(data[0], dict) else "not_dict"}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+            # #endregion
             return data
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        # #region agent log
+        import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"location": "validation.py:try_fix_json_response:direct_parse_failed", "message": "Direct JSON parse failed", "data": {"error": str(e), "error_pos": e.pos if hasattr(e, 'pos') else -1}, "timestamp": __import__('time').time()*1000, "sessionId": "debug-session", "hypothesisId": "A,B"}) + '\n')
+        # #endregion
         pass
     
     # 尝试修复无效的转义序列后再解析
