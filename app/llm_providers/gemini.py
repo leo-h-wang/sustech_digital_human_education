@@ -293,6 +293,9 @@ class GeminiClient(LLMClient):
         logger.info(f"   📊 开始解析解题步骤...")
         logger.info(f"   原始响应长度: {len(response_text)} 字符")
         logger.info(f"   原始响应预览: {response_text[:500]}...")
+        # #region agent log
+        import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"sessionId": "debug-session", "runId": "pre-fix", "hypothesisId": "H1", "location": "gemini.py:_parse_solution_steps:entry", "message": "parse_solution_steps entry", "data": {"response_len": len(response_text), "response_preview": response_text[:300]}, "timestamp": __import__('time').time()*1000}) + '\n')
+        # #endregion
         
         # 如果响应太短，记录完整内容
         if len(response_text) < 500:
@@ -337,6 +340,9 @@ class GeminiClient(LLMClient):
                 logger.info(f"   ✅ 成功提取JSON数组，包含 {len(fixed_data)} 个步骤")
                 # 验证格式
                 is_valid, error_msg = validate_solution_steps(fixed_data)
+                # #region agent log
+                import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"sessionId": "debug-session", "runId": "pre-fix", "hypothesisId": "H1", "location": "gemini.py:_parse_solution_steps:try_fix", "message": "try_fix_json_response result", "data": {"fixed_len": len(fixed_data), "is_valid": is_valid, "error_msg": error_msg}, "timestamp": __import__('time').time()*1000}) + '\n')
+                # #endregion
                 if is_valid:
                     steps = []
                     for item in fixed_data:
@@ -358,6 +364,9 @@ class GeminiClient(LLMClient):
                 logger.warning(f"   ⚠️  try_fix_json_response 返回 None，尝试其他方法")
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(f"   JSON解析异常: {e}")
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"sessionId": "debug-session", "runId": "pre-fix", "hypothesisId": "H1", "location": "gemini.py:_parse_solution_steps:json_exception", "message": "JSON parse exception", "data": {"error": str(e)}, "timestamp": __import__('time').time()*1000}) + '\n')
+            # #endregion
             pass
         
         # 如果 JSON 解析失败，尝试按行解析

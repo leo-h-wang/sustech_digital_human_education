@@ -39,19 +39,6 @@ class NarrationResponse(BaseModel):
     steps: List[NarrationStep] = Field(..., description="讲解步骤列表")
 
 
-class PDFGenerationRequest(BaseModel):
-    """PDF生成请求模型"""
-    problem_text: str = Field(..., description="题目文本")
-    solution_steps: List[SolutionStep] = Field(..., description="解题步骤")
-    narration_steps: Optional[List[NarrationStep]] = Field(None, description="讲解步骤（可选）")
-
-
-class BatchProblemInput(BaseModel):
-    """批量题目输入模型"""
-    problems: List[ProblemInput] = Field(..., description="题目列表")
-    merge_pdf: bool = Field(False, description="是否合并为一个PDF")
-
-
 class ProblemMetadata(BaseModel):
     """题目元数据"""
     id: str = Field(..., description="题目ID")

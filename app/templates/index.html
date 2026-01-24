@@ -184,6 +184,15 @@
                 </div>
             </div>
             
+            <div class="form-group">
+                <label for="outputFormat">课件格式：</label>
+                <select id="outputFormat" name="outputFormat">
+                    <option value="pptx">PPTX</option>
+                    <option value="pdf">PDF</option>
+                </select>
+            </div>
+            
+            
             <button type="submit" class="btn" id="submitBtn">🚀 一键生成课件</button>
         </form>
         
@@ -196,11 +205,14 @@
         <div class="result-section" id="resultSection">
             <div class="result-title">✅ 处理完成！</div>
             <div id="resultContent"></div>
-            <a id="downloadLink" href="#" download style="display: none;">
-                <button class="btn" style="margin-top: 20px;">📥 下载 PDF 课件</button>
-            </a>
             <a id="downloadNarrationLink" href="#" download style="display: none;">
                 <button class="btn" style="margin-top: 10px; background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);">📝 下载解说词 TXT</button>
+            </a>
+            <a id="downloadGammaPptxLink" href="#" target="_blank" rel="noopener" style="display: none;">
+                <button class="btn" style="margin-top: 10px; background: linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%);">📥 下载 Gamma PPTX</button>
+            </a>
+            <a id="downloadGammaPdfLink" href="#" target="_blank" rel="noopener" style="display: none;">
+                <button class="btn" style="margin-top: 10px; background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);">📄 下载 Gamma PDF</button>
             </a>
         </div>
     </div>
@@ -214,8 +226,9 @@
             const error = document.getElementById('error');
             const resultSection = document.getElementById('resultSection');
             const resultContent = document.getElementById('resultContent');
-            const downloadLink = document.getElementById('downloadLink');
             const downloadNarrationLink = document.getElementById('downloadNarrationLink');
+            const downloadGammaPptxLink = document.getElementById('downloadGammaPptxLink');
+            const downloadGammaPdfLink = document.getElementById('downloadGammaPdfLink');
             
             // 重置状态
             submitBtn.disabled = true;
@@ -223,13 +236,15 @@
             error.classList.remove('show');
             resultSection.classList.remove('show');
             downloadNarrationLink.style.display = 'none';
+            downloadGammaPptxLink.style.display = 'none';
+            downloadGammaPdfLink.style.display = 'none';
             
             const problemText = document.getElementById('problemText').value;
             const topic = document.getElementById('topic').value;
             const difficulty = document.getElementById('difficulty').value;
-            
+            const outputFormat = document.getElementById('outputFormat').value;
             try {
-                const response = await fetch('/api/full_pipeline', {
+                const response = await fetch(`/api/full_pipeline?format=${outputFormat}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -246,16 +261,20 @@
                     const errorData = await response.json();
                     throw new Error(errorData.detail || '处理失败');
                 }
+                const data = await response.json();
                 
-                // 获取 PDF blob
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                downloadLink.href = url;
-                downloadLink.download = `problem_${new Date().getTime()}.pdf`;
-                downloadLink.style.display = 'block';
+                // Gamma PPTX/PDF 下载链接
+                if (data.pptx_url) {
+                    downloadGammaPptxLink.href = data.pptx_url;
+                    downloadGammaPptxLink.style.display = 'block';
+                }
+                if (data.pdf_url) {
+                    downloadGammaPdfLink.href = data.pdf_url;
+                    downloadGammaPdfLink.style.display = 'block';
+                }
                 
                 // 获取 narration timestamp（用于下载 txt）
-                const narrationTimestamp = response.headers.get('X-Narration-Timestamp');
+                const narrationTimestamp = data.narration_timestamp;
                 if (narrationTimestamp) {
                     downloadNarrationLink.href = `/api/download_narration/${narrationTimestamp}`;
                     downloadNarrationLink.download = `narration_${narrationTimestamp}.txt`;
@@ -263,7 +282,7 @@
                 }
                 
                 // 显示成功信息
-                resultContent.innerHTML = '<p style="color: #27ae60; font-size: 18px;">✨ PDF 课件和解说词已生成成功！点击下方按钮下载。</p>';
+                resultContent.innerHTML = '<p style="color: #27ae60; font-size: 18px;">✨ 课件和解说词已生成成功！点击下方按钮下载。</p>';
                 resultSection.classList.add('show');
                 
             } catch (err) {

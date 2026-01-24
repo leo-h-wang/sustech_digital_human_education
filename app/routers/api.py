@@ -1,6 +1,6 @@
 """API 路由"""
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse, Response
+from fastapi.responses import FileResponse
 from typing import List, Dict
 import os
 from datetime import datetime
@@ -11,17 +11,12 @@ from app.models.schemas import (
     ProblemInput,
     SolutionResponse,
     NarrationResponse,
-    PDFGenerationRequest,
-    BatchProblemInput
 )
 from app.llm_providers.factory import create_llm_client
 from app.llm_providers.base import LLMClient
-from app.slides.pdf_export_playwright import generate_pdf_async, generate_pdf
+from app.slides.gamma_export import GammaGenerator
 from app.text.tts_friendly import convert_to_tts_friendly
 from app.utils.text_utils import clean_problem_text
-from app.utils.pdf_merge import merge_pdfs
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import asyncio
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -103,29 +98,6 @@ async def generate_narration(
         raise HTTPException(status_code=500, detail=f"生成讲解失败: {str(e)}")
 
 
-@router.post("/generate_pdf")
-async def generate_pdf_endpoint(request: PDFGenerationRequest):
-    """
-    生成 PDF 接口：输入题目、解题步骤和讲解步骤，返回 PDF 文件
-    """
-    try:
-        pdf_bytes = await generate_pdf_async(
-            problem_text=request.problem_text,
-            solution_steps=request.solution_steps,
-            narration_steps=request.narration_steps
-        )
-        
-        return StreamingResponse(
-            pdf_bytes,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename=problem_solution_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            }
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"生成PDF失败: {str(e)}")
-
-
 def align_narration_to_solution(
     solution_steps: List,
     narration_steps: List,
@@ -160,6 +132,11 @@ def align_narration_to_solution(
         else:
             # 缺失时用解题描述兜底（已经过 TTS 处理）
             aligned[step_idx] = convert_to_tts_friendly(step.description or step.title)
+
+    # 补充 narration 中存在但 solution 中缺失的步骤
+    for step_idx, texts in narration_dict.items():
+        if step_idx not in aligned:
+            aligned[step_idx] = '\n\n'.join(texts)
     
     return aligned
 
@@ -195,9 +172,14 @@ def save_narration_txt(
     lines.append("=" * 80)
     lines.append("")
     
-    for step in solution_steps:
-        step_idx = step.step_index
-        lines.append(f"【步骤 {step_idx}】{step.title}")
+    solution_indices = [step.step_index for step in solution_steps]
+    extra_indices = sorted([idx for idx in aligned_narration.keys() if idx not in solution_indices])
+    ordered_indices = solution_indices + extra_indices
+
+    step_title_map = {step.step_index: step.title for step in solution_steps}
+    for step_idx in ordered_indices:
+        title = step_title_map.get(step_idx, "补充讲解")
+        lines.append(f"【步骤 {step_idx}】{title}")
         lines.append("")
         if step_idx in aligned_narration:
             lines.append(aligned_narration[step_idx])
@@ -215,10 +197,11 @@ def save_narration_txt(
 @router.post("/full_pipeline")
 async def full_pipeline(
     problem: ProblemInput,
+    format: str = "pptx",
     llm_client: LLMClient = Depends(get_llm_client)
 ):
     """
-    完整流水线接口：一键完成解题、生成讲解、生成PDF、导出讲解txt
+    完整流水线接口：一键完成解题、生成讲解、生成 Gamma PPT/PDF 链接、导出讲解txt
     """
     try:
         # 基本输入验证
@@ -264,6 +247,12 @@ async def full_pipeline(
         # 应用 TTS 友好转换（去除 Markdown + 数学符号口语化）
         for step in narration_steps:
             step.narration_text = convert_to_tts_friendly(step.narration_text)
+            if not step.narration_text.strip():
+                # 空讲解兜底为对应解题描述
+                matching = next((s for s in solution_steps if s.step_index == step.step_index), None)
+                step.narration_text = convert_to_tts_friendly(
+                    (matching.description if matching else "") or (matching.title if matching else "") or "（讲解缺失）"
+                )
         
         # 步骤3：保存讲解 txt（按 step_index 对齐）
         try:
@@ -273,86 +262,62 @@ async def full_pipeline(
             import logging
             logging.warning(f"保存讲解 txt 失败: {e}")
         
-        # 步骤4：生成 PDF（不包含 narration）
+        # 步骤4：使用 Gamma 生成课件下载链接
+        format_lower = format.strip().lower()
+        if format_lower not in {"pdf", "pptx"}:
+            raise HTTPException(status_code=400, detail="format 只支持 pdf 或 pptx")
+
         try:
-            pdf_bytes = await generate_pdf_async(
+            gamma_generator = GammaGenerator()
+            steps_payload = []
+            for step in solution_steps:
+                content_parts = []
+                if step.description:
+                    content_parts.append(step.description)
+                if step.formula_latex:
+                    content_parts.append(step.formula_latex)
+                content = "\n\n".join(content_parts)
+                steps_payload.append({
+                    "title": step.title or f"Step {step.step_index}",
+                    "content": content
+                })
+
+            file_url = await gamma_generator.generate_slides_from_steps(
                 problem_text=cleaned_text,
-                solution_steps=solution_steps,
-                narration_steps=None  # 明确传 None，不渲染 narration
+                steps=steps_payload,
+                export_as=format_lower,
             )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"PDF 生成失败: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Gamma 生成失败: {str(e)}")
         
         # 步骤5：保存题目记录（JSON）
         try:
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"sessionId": "debug-session", "runId": "pre-fix", "hypothesisId": "H2", "location": "api.py:full_pipeline:save_record_start", "message": "save_problem_record start", "data": {"timestamp": timestamp, "steps_len": len(solution_steps)}, "timestamp": __import__('time').time()*1000}) + '\n')
+            # #endregion
             save_problem_record_with_timestamp(
                 timestamp, cleaned_text, solution_steps, narration_steps, meta
             )
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"sessionId": "debug-session", "runId": "pre-fix", "hypothesisId": "H2", "location": "api.py:full_pipeline:save_record_success", "message": "save_problem_record success", "data": {"timestamp": timestamp}, "timestamp": __import__('time').time()*1000}) + '\n')
+            # #endregion
         except Exception:
             # 记录保存失败不影响主流程
+            # #region agent log
+            import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"sessionId": "debug-session", "runId": "pre-fix", "hypothesisId": "H2", "location": "api.py:full_pipeline:save_record_error", "message": "save_problem_record failed", "data": {}, "timestamp": __import__('time').time()*1000}) + '\n')
+            # #endregion
             pass
         
-        # 返回 PDF，并在响应头中携带 timestamp
-        return StreamingResponse(
-            pdf_bytes,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename=problem_{timestamp}.pdf",
-                "X-Narration-Timestamp": timestamp  # 前端用此 timestamp 下载 txt
-            }
-        )
+        return {
+            "gamma_url": None,
+            "pptx_url": file_url if format_lower == "pptx" else None,
+            "pdf_url": file_url if format_lower == "pdf" else None,
+            "narration_timestamp": timestamp
+        }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"流水线处理失败: {str(e)}")
-
-
-def _process_single_problem(
-    problem: ProblemInput,
-    llm_client: LLMClient
-) -> dict:
-    """处理单个题目（用于并发执行）"""
-    try:
-        meta = {
-            "topic": problem.topic,
-            "difficulty": problem.difficulty,
-            "tags": problem.tags
-        }
-        
-        # 解题
-        solution_steps = llm_client.solve(problem.text, meta)
-        
-        # 生成讲解
-        narration_steps = llm_client.narrate(problem.text, solution_steps, meta)
-        
-        # TTS 友好转换
-        for step in narration_steps:
-            step.narration_text = convert_to_tts_friendly(step.narration_text)
-        
-        # 生成 PDF（批处理中使用同步版本）
-        pdf_bytes = generate_pdf(
-            problem_text=problem.text,
-            solution_steps=solution_steps,
-            narration_steps=narration_steps
-        )
-        
-        # 保存记录（生成新的 timestamp）
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_problem_record_with_timestamp(timestamp, problem.text, solution_steps, narration_steps, meta)
-        
-        return {
-            "problem_text": problem.text,
-            "solution_steps": [s.dict() if hasattr(s, 'dict') else s for s in solution_steps],
-            "narration_steps": [s.dict() if hasattr(s, 'dict') else s for s in narration_steps],
-            "pdf_bytes": pdf_bytes,
-            "success": True
-        }
-    except Exception as e:
-        return {
-            "problem_text": problem.text,
-            "error": str(e),
-            "success": False
-        }
 
 
 @router.get("/download_narration/{timestamp}")
@@ -395,85 +360,6 @@ async def download_narration(timestamp: str):
         raise HTTPException(status_code=500, detail=f"下载讲解脚本失败: {str(e)}")
 
 
-@router.post("/batch_full_pipeline")
-async def batch_full_pipeline(
-    batch_input: BatchProblemInput,
-    llm_client: LLMClient = Depends(get_llm_client),
-    max_workers: int = 3
-):
-    """
-    批量处理接口：处理多道题目，生成多个PDF或合并PDF
-    
-    Args:
-        batch_input: 批量题目输入
-        llm_client: LLM 客户端
-        max_workers: 最大并发数（默认3，避免触发API限流）
-    """
-    try:
-        # 限制批量大小
-        if len(batch_input.problems) > 50:
-            raise HTTPException(
-                status_code=400,
-                detail="批量处理题目数量不能超过50道"
-            )
-        
-        results = []
-        pdf_bytes_list = []
-        
-        # 使用线程池并发处理（注意：LLM API调用是IO密集型）
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                loop.run_in_executor(
-                    executor,
-                    _process_single_problem,
-                    problem,
-                    llm_client
-                )
-                for problem in batch_input.problems
-            ]
-            
-            for future in as_completed(futures):
-                result = await future
-                results.append(result)
-                if result.get("success") and "pdf_bytes" in result:
-                    pdf_bytes_list.append(result["pdf_bytes"])
-        
-        # 如果要求合并PDF
-        if batch_input.merge_pdf:
-            if not pdf_bytes_list:
-                raise HTTPException(
-                    status_code=400,
-                    detail="没有成功生成的PDF可以合并"
-                )
-            
-            merged_pdf = merge_pdfs(pdf_bytes_list)
-            
-            return StreamingResponse(
-                merged_pdf,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"attachment; filename=batch_problems_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                }
-            )
-        else:
-            # 返回处理结果摘要
-            return {
-                "total": len(batch_input.problems),
-                "success": len([r for r in results if r.get("success")]),
-                "failed": len([r for r in results if not r.get("success")]),
-                "results": [
-                    {k: v for k, v in r.items() if k != "pdf_bytes"}  # 移除PDF字节流，只返回元数据
-                    for r in results
-                ]
-            }
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"批量处理失败: {str(e)}")
-
-
 def save_problem_record(
     problem_text: str,
     solution_steps: List,
@@ -496,6 +382,9 @@ def save_problem_record_with_timestamp(
     os.makedirs("problems", exist_ok=True)
     
     filename = f"problems/problem_{timestamp}.json"
+    # #region agent log
+    import json as _json; open(r'e:\sustech_digital_human_education\.cursor\debug.log', 'a', encoding='utf-8').write(_json.dumps({"sessionId": "debug-session", "runId": "pre-fix", "hypothesisId": "H2", "location": "api.py:save_problem_record_with_timestamp:path", "message": "save_problem_record path", "data": {"filename": filename, "cwd": os.getcwd()}, "timestamp": __import__('time').time()*1000}) + '\n')
+    # #endregion
     
     record = {
         "timestamp": timestamp,
