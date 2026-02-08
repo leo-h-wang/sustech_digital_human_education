@@ -136,7 +136,7 @@ class GammaGenerator:
             "textMode": "preserve",
             "format": "presentation",
             "numCards": max(len(steps), 1),
-            "themeId": "chimney-smoke",
+            "themeId": "opgltylm2d2fdfs",
             "textOptions": {
                 "language": "zh-cn"
             },

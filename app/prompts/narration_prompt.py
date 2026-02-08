@@ -110,4 +110,3 @@ def debug_print_narration_prompt(
     print("=" * 80)
     print(prompt)
     print("=" * 80)
-

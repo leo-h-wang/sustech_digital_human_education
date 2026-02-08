@@ -53,6 +53,11 @@ GAMMA_API_KEY=你的Gamma API密钥
 
 PORT=8000
 ```
+### 配置gamma_export theme
+```
+"themeId: "YOUR_THEME_ID"
+```
+此处可以通过选用不同的模板来调整生成的字体大小以及样式
 
 ### 3. 运行服务
 
