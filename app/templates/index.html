@@ -4,233 +4,504 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>南科大高等数学数字人教学工具</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --navy: #1a2a4a;
+            --navy-light: #2c4270;
+            --accent: #c9a84c;
+            --accent-hover: #b8932e;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a6a;
+            --text-muted: #8888a0;
+            --bg-page: #f4f5f8;
+            --bg-card: #ffffff;
+            --bg-section: #f8f9fc;
+            --border: #e0e2ea;
+            --border-focus: #2c4270;
+            --success: #2e7d5b;
+            --success-bg: #eaf5f0;
+            --error: #b33a3a;
+            --error-bg: #fdf0f0;
+            --radius: 6px;
+            --shadow-card: 0 2px 16px rgba(26, 42, 74, 0.08);
+            --shadow-btn: 0 2px 8px rgba(26, 42, 74, 0.12);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
-            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: "Inter", "Noto Serif SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg-page);
             min-height: 100vh;
-            padding: 20px;
+            color: var(--text-primary);
+            line-height: 1.6;
         }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            padding: 40px;
+
+        /* --- Header Bar --- */
+        .site-header {
+            background: var(--navy);
+            color: #fff;
+            padding: 0 40px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            letter-spacing: 0.5px;
+            font-size: 14px;
         }
-        h1 {
-            color: #2c3e50;
-            margin-bottom: 10px;
+        .site-header .brand {
+            font-family: "Noto Serif SC", serif;
+            font-weight: 600;
+            font-size: 15px;
+            opacity: 0.95;
+        }
+
+        /* --- Main Container --- */
+        .page-wrapper {
+            max-width: 820px;
+            margin: 40px auto 60px;
+            padding: 0 20px;
+        }
+
+        .page-title {
             text-align: center;
+            margin-bottom: 8px;
         }
-        .subtitle {
+        .page-title h1 {
+            font-family: "Noto Serif SC", serif;
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--navy);
+            letter-spacing: 1px;
+        }
+        .page-subtitle {
             text-align: center;
-            color: #7f8c8d;
-            margin-bottom: 30px;
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-bottom: 36px;
         }
+
+        /* --- Card --- */
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-card);
+            padding: 32px 36px;
+            margin-bottom: 24px;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 24px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .card-header .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--navy);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .card-header h2 {
+            font-family: "Noto Serif SC", serif;
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--navy);
+        }
+        .card-header .card-desc {
+            margin-left: auto;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* --- Form Elements --- */
         .form-group {
             margin-bottom: 20px;
         }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #34495e;
-            font-weight: bold;
+        .form-group:last-child {
+            margin-bottom: 0;
         }
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        .form-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
         textarea {
             width: 100%;
-            min-height: 150px;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
+            min-height: 140px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 15px;
             font-family: inherit;
             resize: vertical;
+            color: var(--text-primary);
+            background: var(--bg-card);
+            transition: border-color 0.2s;
         }
         textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(44, 66, 112, 0.08);
         }
-        .row {
+        textarea::placeholder {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .form-row {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
         }
+
         select, input[type="text"] {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text-primary);
+            background: var(--bg-card);
+            transition: border-color 0.2s;
+            appearance: auto;
         }
-        select:focus, input:focus {
+        select:focus, input[type="text"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(44, 66, 112, 0.08);
         }
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 18px;
-            border-radius: 5px;
+
+        input[type="file"] {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        input[type="file"]::file-selector-button {
+            padding: 6px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-section);
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--text-secondary);
             cursor: pointer;
+            margin-right: 12px;
+            transition: background 0.15s;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background: var(--border);
+        }
+
+        /* --- Buttons --- */
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: var(--navy);
+            color: #fff;
+            border: none;
+            padding: 11px 28px;
+            font-size: 15px;
+            font-family: inherit;
+            font-weight: 500;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
             width: 100%;
-            margin-top: 10px;
-            transition: transform 0.2s;
+            margin-top: 6px;
         }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        .btn-primary:hover {
+            background: var(--navy-light);
+            box-shadow: var(--shadow-btn);
         }
-        .btn:disabled {
-            background: #ccc;
+        .btn-primary:disabled {
+            background: #b0b4c0;
             cursor: not-allowed;
-            transform: none;
+            box-shadow: none;
         }
-        .result-section {
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 5px;
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: transparent;
+            color: var(--navy);
+            border: 1.5px solid var(--navy);
+            padding: 10px 24px;
+            font-size: 14px;
+            font-family: inherit;
+            font-weight: 500;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            text-decoration: none;
+        }
+        .btn-secondary:hover {
+            background: var(--navy);
+            color: #fff;
+        }
+
+        /* --- Status Messages --- */
+        .status-loading {
             display: none;
-        }
-        .result-section.show {
-            display: block;
-        }
-        .result-title {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            color: #2c3e50;
-        }
-        .step-item {
-            background: white;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            border-left: 4px solid #667eea;
-        }
-        .step-title {
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 8px;
-        }
-        .step-content {
-            color: #555;
-            line-height: 1.6;
-        }
-        .loading {
             text-align: center;
-            padding: 20px;
-            color: #667eea;
-            display: none;
+            padding: 20px 16px;
+            color: var(--navy-light);
+            font-size: 14px;
         }
-        .loading.show {
+        .status-loading.show {
             display: block;
         }
-        .error {
-            background: #fee;
-            color: #c33;
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 20px;
-            display: none;
+        .status-loading .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid var(--border);
+            border-top-color: var(--navy);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
         }
-        .error.show {
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-error {
+            display: none;
+            background: var(--error-bg);
+            color: var(--error);
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            margin-top: 16px;
+            font-size: 14px;
+            border-left: 3px solid var(--error);
+        }
+        .status-error.show {
             display: block;
+        }
+
+        /* --- Result Section --- */
+        .result-panel {
+            display: none;
+            margin-top: 16px;
+            padding: 24px;
+            background: var(--success-bg);
+            border-radius: var(--radius);
+            border-left: 3px solid var(--success);
+        }
+        .result-panel.show {
+            display: block;
+        }
+        .result-panel .result-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--success);
+            margin-bottom: 16px;
+        }
+        .result-panel .result-message {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 18px;
+        }
+        .download-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .download-group a {
+            text-decoration: none;
+        }
+
+        /* --- Divider --- */
+        .section-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 8px 0;
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .section-divider::before,
+        .section-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* --- Footer --- */
+        .site-footer {
+            text-align: center;
+            padding: 16px 20px 32px;
+            font-size: 12px;
+            color: var(--text-muted);
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📚 南科大高等数学数字人教学工具</h1>
-        <p class="subtitle">AI 解题 + 自动生成讲解课件</p>
-        
-        <form id="problemForm">
-            <div class="form-group">
-                <label for="problemText">题目内容（支持 Markdown/LaTeX）：</label>
-                <textarea id="problemText" name="problemText" placeholder="请输入高等数学题目，例如：&#10;求极限：$$\lim_{x \to 0} \frac{\sin x}{x}$$" required></textarea>
-            </div>
-            
-            <div class="row">
-                <div class="form-group">
-                    <label for="topic">题型：</label>
-                    <select id="topic" name="topic">
-                        <option value="">请选择（可选）</option>
-                        <option value="极限">极限</option>
-                        <option value="导数">导数</option>
-                        <option value="积分">积分</option>
-                        <option value="级数">级数</option>
-                        <option value="微分方程">微分方程</option>
-                        <option value="多元函数">多元函数</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="difficulty">难度：</label>
-                    <select id="difficulty" name="difficulty">
-                        <option value="">请选择（可选）</option>
-                        <option value="简单">简单</option>
-                        <option value="中等">中等</option>
-                        <option value="困难">困难</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="outputFormat">课件格式：</label>
-                <select id="outputFormat" name="outputFormat">
-                    <option value="pptx">PPTX</option>
-                    <option value="pdf">PDF</option>
-                </select>
-            </div>
-            
-            
-            <button type="submit" class="btn" id="submitBtn">🚀 一键生成课件</button>
-        </form>
-        
-        <div class="loading" id="loading">
-            <p>⏳ 正在处理中，请稍候...</p>
+    <header class="site-header">
+        <span class="brand">SUSTech -- Department of Mathematics</span>
+    </header>
+
+    <div class="page-wrapper">
+        <div class="page-title">
+            <h1>高等数学数字人教学工具</h1>
         </div>
-        
-        <div class="error" id="error"></div>
-        
-        <div class="result-section" id="resultSection">
-            <div class="result-title">✅ 处理完成！</div>
-            <div id="resultContent"></div>
-            <a id="downloadNarrationLink" href="#" download style="display: none;">
-                <button class="btn" style="margin-top: 10px; background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);">📝 下载解说词 TXT</button>
-            </a>
-            <a id="downloadGammaPptxLink" href="#" target="_blank" rel="noopener" style="display: none;">
-                <button class="btn" style="margin-top: 10px; background: linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%);">📥 下载 Gamma PPTX</button>
-            </a>
-            <a id="downloadGammaPdfLink" href="#" target="_blank" rel="noopener" style="display: none;">
-                <button class="btn" style="margin-top: 10px; background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);">📄 下载 Gamma PDF</button>
-            </a>
+        <p class="page-subtitle">输入题目，自动生成结构化解题过程与教学课件</p>
+
+        <!-- Card 1: Main Pipeline -->
+        <div class="card">
+            <div class="card-header">
+                <span class="step-badge">1</span>
+                <h2>题目录入与课件生成</h2>
+                <span class="card-desc">一键完成解题、讲解与课件导出</span>
+            </div>
+
+            <form id="problemForm">
+                <div class="form-group">
+                    <label class="form-label" for="problemText">题目内容</label>
+                    <textarea id="problemText" name="problemText"
+                        placeholder="请输入高等数学题目，支持 LaTeX 公式。例如：&#10;求极限 $$\lim_{x \to 0} \frac{\sin x}{x}$$"
+                        required></textarea>
+                    <p class="form-hint">支持 Markdown 与 LaTeX 格式，建议使用 $$ 包裹公式</p>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="topic">题型分类</label>
+                        <select id="topic" name="topic">
+                            <option value="">不限</option>
+                            <option value="极限">极限</option>
+                            <option value="导数">导数</option>
+                            <option value="积分">积分</option>
+                            <option value="级数">级数</option>
+                            <option value="微分方程">微分方程</option>
+                            <option value="多元函数">多元函数</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="difficulty">难度等级</label>
+                        <select id="difficulty" name="difficulty">
+                            <option value="">不限</option>
+                            <option value="简单">基础</option>
+                            <option value="中等">进阶</option>
+                            <option value="困难">挑战</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="outputFormat">导出格式</label>
+                        <select id="outputFormat" name="outputFormat">
+                            <option value="pptx">PPTX 演示文稿</option>
+                            <option value="pdf">PDF 文档</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="submitBtn">生成课件</button>
+            </form>
+
+            <div class="status-loading" id="loading">
+                <span class="spinner"></span>正在生成中，请耐心等候 ...
+            </div>
+            <div class="status-error" id="error"></div>
+
+            <div class="result-panel" id="resultSection">
+                <div class="result-title">课件生成完成</div>
+                <div class="result-message" id="resultContent">解题过程与讲解已就绪，请点击下方按钮下载对应文件。</div>
+                <div class="download-group">
+                    <a id="downloadNarrationLink" href="#" download style="display: none;">
+                        <button type="button" class="btn-secondary">下载解说词 (.txt)</button>
+                    </a>
+                    <a id="downloadGammaPptxLink" href="#" target="_blank" rel="noopener" style="display: none;">
+                        <button type="button" class="btn-secondary">下载演示文稿 (.pptx)</button>
+                    </a>
+                    <a id="downloadGammaPdfLink" href="#" target="_blank" rel="noopener" style="display: none;">
+                        <button type="button" class="btn-secondary">下载文档 (.pdf)</button>
+                    </a>
+                </div>
+            </div>
         </div>
+
+        <div class="section-divider">附加功能</div>
+
+        <!-- Card 2: Retry Narration -->
+        <div class="card">
+            <div class="card-header">
+                <span class="step-badge">2</span>
+                <h2>重新生成解说词</h2>
+                <span class="card-desc">上传已有记录，仅重新生成讲解文本</span>
+            </div>
+
+            <form id="retryNarrationForm">
+                <div class="form-group">
+                    <label class="form-label" for="problemJsonFile">选择题目记录文件</label>
+                    <input type="file" id="problemJsonFile" name="problemJsonFile" accept=".json" required>
+                    <p class="form-hint">请上传先前生成的 problem JSON 文件 (位于 problems/ 目录)</p>
+                </div>
+                <button type="submit" class="btn-primary" id="retryNarrationBtn">重新生成</button>
+            </form>
+
+            <div class="status-loading" id="retryLoading">
+                <span class="spinner"></span>正在重新生成解说词 ...
+            </div>
+            <div class="status-error" id="retryError"></div>
+
+            <div class="result-panel" id="retryResultSection">
+                <div class="result-title">解说词已更新</div>
+                <div class="result-message" id="retryResultContent">新的解说词已生成完毕，请点击下方按钮下载。</div>
+                <div class="download-group">
+                    <a id="retryDownloadNarrationLink" href="#" download style="display: none;">
+                        <button type="button" class="btn-secondary">下载解说词 (.txt)</button>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <footer class="site-footer">
+            Southern University of Science and Technology -- Advanced Mathematics Digital Teaching Platform
+        </footer>
     </div>
-    
+
     <script>
         document.getElementById('problemForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const submitBtn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
             const error = document.getElementById('error');
             const resultSection = document.getElementById('resultSection');
-            const resultContent = document.getElementById('resultContent');
             const downloadNarrationLink = document.getElementById('downloadNarrationLink');
             const downloadGammaPptxLink = document.getElementById('downloadGammaPptxLink');
             const downloadGammaPdfLink = document.getElementById('downloadGammaPdfLink');
-            
-            // 重置状态
+
             submitBtn.disabled = true;
             loading.classList.add('show');
             error.classList.remove('show');
@@ -238,17 +509,16 @@
             downloadNarrationLink.style.display = 'none';
             downloadGammaPptxLink.style.display = 'none';
             downloadGammaPdfLink.style.display = 'none';
-            
+
             const problemText = document.getElementById('problemText').value;
             const topic = document.getElementById('topic').value;
             const difficulty = document.getElementById('difficulty').value;
             const outputFormat = document.getElementById('outputFormat').value;
+
             try {
                 const response = await fetch(`/api/full_pipeline?format=${outputFormat}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         text: problemText,
                         topic: topic || null,
@@ -256,44 +526,96 @@
                         tags: []
                     })
                 });
-                
+
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.detail || '处理失败');
                 }
+
                 const data = await response.json();
-                
-                // Gamma PPTX/PDF 下载链接
+
                 if (data.pptx_url) {
                     downloadGammaPptxLink.href = data.pptx_url;
-                    downloadGammaPptxLink.style.display = 'block';
+                    downloadGammaPptxLink.style.display = 'inline-block';
                 }
                 if (data.pdf_url) {
                     downloadGammaPdfLink.href = data.pdf_url;
-                    downloadGammaPdfLink.style.display = 'block';
+                    downloadGammaPdfLink.style.display = 'inline-block';
                 }
-                
-                // 获取 narration timestamp（用于下载 txt）
+
                 const narrationTimestamp = data.narration_timestamp;
                 if (narrationTimestamp) {
                     downloadNarrationLink.href = `/api/download_narration/${narrationTimestamp}`;
                     downloadNarrationLink.download = `narration_${narrationTimestamp}.txt`;
-                    downloadNarrationLink.style.display = 'block';
+                    downloadNarrationLink.style.display = 'inline-block';
                 }
-                
-                // 显示成功信息
-                resultContent.innerHTML = '<p style="color: #27ae60; font-size: 18px;">✨ 课件和解说词已生成成功！点击下方按钮下载。</p>';
+
                 resultSection.classList.add('show');
-                
             } catch (err) {
-                error.textContent = '❌ 错误：' + err.message;
+                error.textContent = err.message;
                 error.classList.add('show');
             } finally {
                 submitBtn.disabled = false;
                 loading.classList.remove('show');
             }
         });
+
+        document.getElementById('retryNarrationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const retryBtn = document.getElementById('retryNarrationBtn');
+            const retryLoading = document.getElementById('retryLoading');
+            const retryError = document.getElementById('retryError');
+            const retryResultSection = document.getElementById('retryResultSection');
+            const retryDownloadNarrationLink = document.getElementById('retryDownloadNarrationLink');
+            const fileInput = document.getElementById('problemJsonFile');
+
+            retryBtn.disabled = true;
+            retryLoading.classList.add('show');
+            retryError.classList.remove('show');
+            retryResultSection.classList.remove('show');
+            retryDownloadNarrationLink.style.display = 'none';
+
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) {
+                retryError.textContent = '请选择 problem JSON 文件';
+                retryError.classList.add('show');
+                retryBtn.disabled = false;
+                retryLoading.classList.remove('show');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/retry_narration', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '处理失败');
+                }
+
+                const data = await response.json();
+                const narrationTimestamp = data.narration_timestamp;
+                if (narrationTimestamp) {
+                    retryDownloadNarrationLink.href = `/api/download_narration/${narrationTimestamp}`;
+                    retryDownloadNarrationLink.download = `narration_${narrationTimestamp}.txt`;
+                    retryDownloadNarrationLink.style.display = 'inline-block';
+                }
+
+                retryResultSection.classList.add('show');
+            } catch (err) {
+                retryError.textContent = err.message;
+                retryError.classList.add('show');
+            } finally {
+                retryBtn.disabled = false;
+                retryLoading.classList.remove('show');
+            }
+        });
     </script>
 </body>
 </html>
-
