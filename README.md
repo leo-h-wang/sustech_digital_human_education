@@ -45,8 +45,10 @@ TONGYI_TIMEOUT=180
 
 # ========== Gemini 配置 ==========
 GEMINI_API_KEY=你的Gemini API密钥
-GEMINI_MODEL=gemini-2.5-flash
-GEMINI_TIMEOUT=120
+GEMINI_MODEL=gemini-2.5-pro
+# 备用模型：主模型触发速率限制时自动降级（设为空可禁用）
+GEMINI_FALLBACK_MODEL=gemini-2.5-flash
+GEMINI_TIMEOUT=180
 
 # ========== Gamma 配置 ==========
 GAMMA_API_KEY=你的Gamma API密钥

@@ -80,19 +80,24 @@ TONGYI_MODEL=qwen-max
 # 获取方式：访问 https://aistudio.google.com/app/apikey 创建 API Key
 GEMINI_API_KEY=你的Gemini API密钥
 
-# Gemini 模型配置（可选，默认 gemini-2.5-flash）
-# 可选值: gemini-2.5-flash（推荐，免费层级可用，速度快）, gemini-2.5-pro（最强，可能需要付费）
-# gemini-1.5-pro（Pro版本）, gemini-1.5-flash（快速版本）
-GEMINI_MODEL=gemini-2.5-flash
+# Gemini 模型配置（可选，默认 gemini-2.5-pro）
+# 可选值: gemini-2.5-pro（推荐，推理最强，免费层级 5 RPM / 100 RPD）
+#         gemini-2.5-flash（速度快，免费层级 10 RPM / 500 RPD）
+#         gemini-2.5-flash-lite（最快，免费层级 15 RPM / 1000 RPD）
+GEMINI_MODEL=gemini-2.5-pro
+
+# 备用模型：主模型触发速率限制（429）时自动降级（设为空可禁用）
+GEMINI_FALLBACK_MODEL=gemini-2.5-flash
 
 # Gemini 超时配置（可选，会根据模型自动调整）
-# Flash 模型默认 120 秒，Pro 模型默认 180 秒
-# GEMINI_TIMEOUT=120
+# Pro 模型默认 180 秒，Flash 模型默认 120 秒
+# GEMINI_TIMEOUT=180
 
 # Gemini 速率限制配置（可选，针对免费层级优化）
 # GEMINI_MAX_RETRIES=3      # 最大重试次数（默认 3）
 # GEMINI_RETRY_DELAY=1.0    # 初始重试延迟（秒，默认 1.0）
-# GEMINI_MIN_INTERVAL=6.0   # 请求最小间隔（秒，默认 6.0，符合免费层级 RPM=10 的限制）
+# GEMINI_MIN_INTERVAL=       # 请求最小间隔（秒）—— 留空则按模型自动设置
+#                             # gemini-2.5-pro=12s, gemini-2.5-flash=6s, flash-lite=4s
 
 # 服务端口（可选，默认8000）
 PORT=8000
