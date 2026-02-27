@@ -80,18 +80,19 @@ TONGYI_MODEL=qwen-max
 # 获取方式：访问 https://aistudio.google.com/app/apikey 创建 API Key
 GEMINI_API_KEY=你的Gemini API密钥
 
-# Gemini 模型配置（可选，默认 gemini-2.5-pro）
-# 可选值: gemini-2.5-pro（推荐，推理最强，免费层级 5 RPM / 100 RPD）
-#         gemini-2.5-flash（速度快，免费层级 10 RPM / 500 RPD）
-#         gemini-2.5-flash-lite（最快，免费层级 15 RPM / 1000 RPD）
-GEMINI_MODEL=gemini-2.5-pro
+# Gemini 模型配置（可选，默认 gemini-2.5-flash）
+# 可选值: gemini-2.5-flash（推荐，免费层级通用可用，10 RPM / 500 RPD）
+#         gemini-2.5-pro（推理最强，但部分免费账户 quota=0 不可用，5 RPM / 100 RPD）
+#         gemini-2.5-flash-lite（最快，15 RPM / 1000 RPD）
+GEMINI_MODEL=gemini-2.5-flash
 
-# 备用模型：主模型触发速率限制（429）时自动降级（设为空可禁用）
-GEMINI_FALLBACK_MODEL=gemini-2.5-flash
+# 备用模型：主模型触发速率限制或 quota=0 时自动降级（留空禁用）
+# 例如：设置主模型为 pro，备用为 flash，可在 pro 不可用时自动降级
+# GEMINI_FALLBACK_MODEL=gemini-2.5-flash
 
 # Gemini 超时配置（可选，会根据模型自动调整）
-# Pro 模型默认 180 秒，Flash 模型默认 120 秒
-# GEMINI_TIMEOUT=180
+# Flash 模型默认 120 秒，Pro 模型默认 180 秒
+# GEMINI_TIMEOUT=120
 
 # Gemini 速率限制配置（可选，针对免费层级优化）
 # GEMINI_MAX_RETRIES=3      # 最大重试次数（默认 3）
