@@ -41,9 +41,11 @@ class GeminiClient(LLMClient):
 
         Args:
             api_key: API密钥，如果为None则从环境变量获取
-            model: 主模型名称，默认 gemini-2.5-pro（免费层级可用，推理能力最强）
+            model: 主模型名称，默认 gemini-2.5-flash（免费层级通用可用）
                   可选值: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite,
                           gemini-1.5-pro, gemini-1.5-flash
+                  注意: gemini-2.5-pro 在部分免费层级账户中 quota 可能为 0，
+                        此时会自动降级到备用模型。
         """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         if not self.api_key:
@@ -51,14 +53,18 @@ class GeminiClient(LLMClient):
 
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
-        # 主模型：默认 gemini-2.5-pro（推理准确度最高）
-        self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+        # 主模型：默认 gemini-2.5-flash（免费层级通用可用）
+        # 如需使用 pro 模型，设置 GEMINI_MODEL=gemini-2.5-pro（需要账户有 pro 配额）
+        self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-        # 备用模型：主模型遇到速率限制时自动降级
+        # 备用模型：主模型遇到速率限制/配额不足时自动降级
         # 设为空字符串可禁用降级
-        self.fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
+        self.fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "")
         if self.fallback_model == self.model:
             self.fallback_model = ""
+
+        # 会话级别的已屏蔽模型集合：quota=0 的模型会被记住，后续请求直接跳过
+        self._blocked_models: set = set()
 
         logger.info(f"🤖 Gemini 客户端已初始化")
         logger.info(f"   主模型: {self.model}")
@@ -111,12 +117,53 @@ class GeminiClient(LLMClient):
             return 180.0
         return 120.0
     
+    def _try_fallback(self, active_model: str, prompt: str, temperature: float,
+                      max_tokens: int, timeout: Optional[float],
+                      _model_override: Optional[str]) -> Optional[str]:
+        """如果有可用的备用模型，尝试降级。返回结果字符串或 None。"""
+        fallback = self.fallback_model
+        if _model_override or not fallback or active_model == fallback:
+            return None
+        if fallback in self._blocked_models:
+            logger.warning(f"   备用模型 {fallback} 也已被屏蔽（quota=0），无法降级")
+            return None
+
+        logger.warning(
+            f"🔄 主模型 {active_model} 不可用，自动降级到备用模型 {fallback}"
+        )
+        return self._call_api(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            _model_override=fallback,
+        )
+
+    @staticmethod
+    def _is_zero_quota(error_message: str) -> bool:
+        """检测 429 错误是否因为 quota limit: 0（模型在该免费层级完全不可用）"""
+        return "limit: 0" in error_message
+
     def _call_api(self, prompt: str, temperature: float = 0.7, max_tokens: int = 2000,
                   timeout: Optional[float] = None, *, _model_override: Optional[str] = None) -> str:
         """调用 Gemini API，支持自动降级到备用模型"""
         import re as _re
 
         active_model = _model_override or self.model
+
+        # 如果该模型已被标记为 quota=0，直接跳到备用模型
+        if active_model in self._blocked_models:
+            logger.info(f"⏭️  跳过已屏蔽模型 {active_model}（quota=0）")
+            result = self._try_fallback(
+                active_model, prompt, temperature, max_tokens, timeout, _model_override
+            )
+            if result is not None:
+                return result
+            raise ValueError(
+                f"模型 {active_model} 配额为 0 且无可用备用模型。"
+                f"请检查 API key 的免费层级权限或更换 GEMINI_MODEL。"
+            )
+
         call_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         logger.info(f"📤 [调用 {call_id}] 开始调用 Gemini API")
         logger.info(f"   模型: {active_model}")
@@ -168,6 +215,24 @@ class GeminiClient(LLMClient):
                             error_detail += f": {error_message}"
 
                             if response.status_code == 429:
+                                # 检测 quota=0：模型在该免费层级完全不可用
+                                if self._is_zero_quota(error_message):
+                                    self._blocked_models.add(active_model)
+                                    logger.error(
+                                        f"🚫 模型 {active_model} 免费层级配额为 0 "
+                                        f"（已屏蔽，本次会话内不再尝试）"
+                                    )
+                                    result = self._try_fallback(
+                                        active_model, prompt, temperature,
+                                        max_tokens, timeout, _model_override,
+                                    )
+                                    if result is not None:
+                                        return result
+                                    raise ValueError(
+                                        f"模型 {active_model} 配额为 0 且无可用备用模型。"
+                                        f"请检查 API key 的免费层级权限或更换 GEMINI_MODEL。"
+                                    )
+
                                 logger.warning(
                                     f"⚠️  [尝试 {attempt + 1}/{self.max_retries + 1}] "
                                     f"{active_model} 速率限制（429）"
@@ -179,23 +244,12 @@ class GeminiClient(LLMClient):
                                         retry_seconds = max(float(m.group(1)), retry_seconds)
 
                                 if attempt >= self.max_retries:
-                                    # 主模型重试用尽 → 降级到备用模型
-                                    if (
-                                        not _model_override
-                                        and self.fallback_model
-                                        and active_model != self.fallback_model
-                                    ):
-                                        logger.warning(
-                                            f"🔄 主模型 {active_model} 速率受限，"
-                                            f"自动降级到备用模型 {self.fallback_model}"
-                                        )
-                                        return self._call_api(
-                                            prompt,
-                                            temperature=temperature,
-                                            max_tokens=max_tokens,
-                                            timeout=timeout,
-                                            _model_override=self.fallback_model,
-                                        )
+                                    result = self._try_fallback(
+                                        active_model, prompt, temperature,
+                                        max_tokens, timeout, _model_override,
+                                    )
+                                    if result is not None:
+                                        return result
                                     logger.error(f"❌ 达到最大重试次数，放弃重试")
                                     raise ValueError(f"API 请求失败: {error_detail}")
 
