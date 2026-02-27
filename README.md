@@ -45,7 +45,11 @@ TONGYI_TIMEOUT=180
 
 # ========== Gemini 配置 ==========
 GEMINI_API_KEY=你的Gemini API密钥
+# 默认 gemini-2.5-flash（免费层级通用可用）
+# 如需更高推理精度可尝试 gemini-2.5-pro（部分免费账户 quota=0，不可用）
 GEMINI_MODEL=gemini-2.5-flash
+# 备用模型：主模型触发速率限制 / 配额为零时自动降级（留空禁用）
+# GEMINI_FALLBACK_MODEL=gemini-2.5-flash
 GEMINI_TIMEOUT=120
 
 # ========== Gamma 配置 ==========
