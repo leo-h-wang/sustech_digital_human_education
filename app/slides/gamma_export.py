@@ -117,9 +117,11 @@ class GammaGenerator:
 
         prompt += (
             "\nRequirements:\n"
-            "- Use a clean, educational visual style.\n"
+            "- Title rule：Slide titles/headings must be plain text only. Do not put <math>...</math>, MathML, LaTeX, or $...$ in any title/heading\n"
+            "- Sanitize：If you see <math> inside any heading, remove it and replace with Unicode (Δ, π, →, ≤, ≥) or plain words.\n"
             "- Render LaTeX equations clearly using $$ for block math.\n"
             "- One step per slide."
+            
         )
         return prompt
 
@@ -136,7 +138,7 @@ class GammaGenerator:
             "textMode": "preserve",
             "format": "presentation",
             "numCards": max(len(steps), 1),
-            "themeId": "opgltylm2d2fdfs",
+            "themeId": "opgltylm2d2fdfs",        #使用特制的sustech_education主题确保字体大小符合要求
             "textOptions": {
                 "language": "zh-cn"
             },
