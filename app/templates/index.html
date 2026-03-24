@@ -485,6 +485,77 @@
             </div>
         </div>
 
+        <!-- Card 3: Manim Video Pipeline -->
+        <div class="card">
+            <div class="card-header">
+                <span class="step-badge">3</span>
+                <h2>Manim 视频讲解生成</h2>
+                <span class="card-desc">解题 → 验证 → 讲解脚本 → 渲染讲解视频</span>
+            </div>
+
+            <form id="manimForm">
+                <div class="form-group">
+                    <label class="form-label" for="manimProblemText">题目内容</label>
+                    <textarea id="manimProblemText" name="manimProblemText"
+                        placeholder="请输入高等数学题目，例如：&#10;求极限 $$\lim_{x \to 0} \frac{\sin x}{x}$$"
+                        required></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="manimTopic">题型分类</label>
+                        <select id="manimTopic" name="manimTopic">
+                            <option value="">不限</option>
+                            <option value="极限">极限</option>
+                            <option value="导数">导数</option>
+                            <option value="积分">积分</option>
+                            <option value="级数">级数</option>
+                            <option value="微分方程">微分方程</option>
+                            <option value="多元函数">多元函数</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="manimDifficulty">难度</label>
+                        <select id="manimDifficulty" name="manimDifficulty">
+                            <option value="">不限</option>
+                            <option value="简单">简单</option>
+                            <option value="中等">中等</option>
+                            <option value="困难">困难</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="wordsPerSecond">讲解语速（字/秒）</label>
+                        <input type="number" id="wordsPerSecond" name="wordsPerSecond"
+                            value="3.0" min="1" max="10" step="0.5"
+                            style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;">
+                        <p class="form-hint">影响视频每步时长，建议 2.5-4.0</p>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="manimSubmitBtn">生成视频与讲解</button>
+            </form>
+
+            <div class="status-loading" id="manimLoading">正在解题、验证并渲染视频，请耐心等待（约 1-3 分钟）...</div>
+            <div class="status-error" id="manimError"></div>
+
+            <div class="result-panel" id="manimResultSection">
+                <div class="result-title">生成完成</div>
+                <div class="result-message">已完成解题验证与视频渲染，请下载以下文件：</div>
+                <div class="download-group">
+                    <a id="manimDownloadNarration" href="#" download style="display:none;">
+                        <button type="button" class="btn-secondary">下载讲解脚本 (.txt)</button>
+                    </a>
+                    <a id="manimDownloadVideo" href="#" download style="display:none;">
+                        <button type="button" class="btn-secondary">下载讲解视频 (.mp4)</button>
+                    </a>
+                    <a id="manimDownloadTiming" href="#" download style="display:none;">
+                        <button type="button" class="btn-secondary">下载时序数据 (.json)</button>
+                    </a>
+                </div>
+                <div id="manimValidationInfo" style="margin-top:12px;font-size:13px;color:var(--text-muted);"></div>
+            </div>
+        </div>
+
         <footer class="site-footer">
             Southern University of Science and Technology -- Advanced Mathematics Digital Teaching Platform
         </footer>
@@ -614,6 +685,76 @@
             } finally {
                 retryBtn.disabled = false;
                 retryLoading.classList.remove('show');
+            }
+        });
+
+        // ── Manim Pipeline ────────────────────────────────────────────────────────
+        document.getElementById('manimForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('manimSubmitBtn');
+            const loading = document.getElementById('manimLoading');
+            const error = document.getElementById('manimError');
+            const resultSection = document.getElementById('manimResultSection');
+
+            submitBtn.disabled = true;
+            loading.classList.add('show');
+            error.classList.remove('show');
+            resultSection.classList.remove('show');
+
+            const problemText = document.getElementById('manimProblemText').value;
+            const topic = document.getElementById('manimTopic').value;
+            const difficulty = document.getElementById('manimDifficulty').value;
+            const wordsPerSecond = parseFloat(document.getElementById('wordsPerSecond').value) || 3.0;
+
+            try {
+                const response = await fetch('/api/manim_pipeline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: problemText,
+                        topic: topic || null,
+                        difficulty: difficulty || null,
+                        tags: [],
+                        words_per_second: wordsPerSecond
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '处理失败');
+                }
+
+                const data = await response.json();
+                const ts = data.narration_txt_path.match(/(\d{8}_\d{6})/)?.[1];
+
+                if (ts) {
+                    const narrationLink = document.getElementById('manimDownloadNarration');
+                    narrationLink.href = `/api/download_narration/${ts}`;
+                    narrationLink.download = `narration_${ts}.txt`;
+                    narrationLink.style.display = 'inline-block';
+
+                    const videoLink = document.getElementById('manimDownloadVideo');
+                    videoLink.href = `/api/download_video/${ts}`;
+                    videoLink.download = `solution_${ts}.mp4`;
+                    videoLink.style.display = 'inline-block';
+
+                    const timingLink = document.getElementById('manimDownloadTiming');
+                    timingLink.href = `/api/download_timing/${ts}`;
+                    timingLink.download = `timing_${ts}.json`;
+                    timingLink.style.display = 'inline-block';
+                }
+
+                document.getElementById('manimValidationInfo').textContent =
+                    `验证尝试次数：${data.validation_attempts}，共 ${data.steps.length} 步解题过程`;
+
+                resultSection.classList.add('show');
+            } catch (err) {
+                error.textContent = err.message;
+                error.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+                loading.classList.remove('show');
             }
         });
     </script>

@@ -21,9 +21,8 @@ env/
 *.swp
 *.swo
 
-# 自动生成的题目记录
-problems/*.json
-problems/*.txt
+# 自动生成的题目记录（运行时产物，不纳入版本控制）
+problems/
 
 # 系统文件
 .DS_Store

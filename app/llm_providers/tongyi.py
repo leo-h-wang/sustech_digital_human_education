@@ -518,6 +518,39 @@ class TongyiClient(LLMClient):
         
         return steps
     
+    def verify(
+        self,
+        problem_text: str,
+        solution_steps: List[SolutionStep],
+        meta: Optional[Dict[str, Any]] = None
+    ) -> "VerificationResult":
+        """交叉验证解题步骤是否正确"""
+        from app.prompts.verify_prompt import get_verify_prompt
+        from app.models.schemas import VerificationResult
+        import json as _json
+
+        prompt = get_verify_prompt(problem_text, solution_steps, meta or {})
+        response = self._call_api(prompt, temperature=0.1, max_tokens=1000)
+
+        cleaned = response.strip()
+        if cleaned.startswith('```'):
+            lines = cleaned.split('\n')
+            lines = lines[1:] if lines[0].startswith('```') else lines
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            cleaned = '\n'.join(lines)
+
+        try:
+            data = _json.loads(cleaned)
+            return VerificationResult(
+                is_correct=bool(data.get("is_correct", False)),
+                feedback=str(data.get("feedback", ""))
+            )
+        except Exception:
+            lower = cleaned.lower()
+            is_correct = "correct" in lower or "正确" in lower
+            return VerificationResult(is_correct=is_correct, feedback=cleaned[:300])
+
     def get_provider_name(self) -> str:
         return "tongyi"
 

@@ -47,3 +47,33 @@ class ProblemMetadata(BaseModel):
     difficulty: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
 
+
+class VerificationResult(BaseModel):
+    """LLM 解题验证结果"""
+    is_correct: bool = Field(..., description="解题过程是否正确")
+    feedback: str = Field("", description="验证反馈，错误时详细说明")
+
+
+class StepTiming(BaseModel):
+    """单步骤时间戳"""
+    step_index: int = Field(..., description="步骤序号")
+    start_sec: float = Field(..., description="该步骤开始时间（秒）")
+    end_sec: float = Field(..., description="该步骤结束时间（秒）")
+    narration_text: str = Field(..., description="该步骤讲解文本")
+
+
+class ManimPipelineRequest(ProblemInput):
+    """Manim 流水线请求模型"""
+    words_per_second: float = Field(3.0, description="数字人说话速度（字/秒），用于计算各步骤时长")
+
+
+class ManimPipelineResponse(BaseModel):
+    """Manim 流水线响应模型"""
+    problem_text: str = Field(..., description="原始题目文本")
+    steps: List[SolutionStep] = Field(..., description="解题步骤列表")
+    narration_txt_path: str = Field(..., description="讲解脚本文件路径")
+    video_path: str = Field(..., description="Manim 渲染视频路径")
+    timing_json_path: str = Field(..., description="时间轴 JSON 文件路径")
+    timing: List[StepTiming] = Field(..., description="各步骤时间戳")
+    validation_attempts: int = Field(..., description="验证尝试次数")
+

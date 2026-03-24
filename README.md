@@ -61,7 +61,7 @@ PORT=8000
 
 ### 3. 运行服务
 
-```bash
+```bash 
 uv run python main.py
 ```
 

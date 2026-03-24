@@ -34,9 +34,16 @@ def get_solver_prompt(problem_text: str, meta: Dict[str, Any]) -> str:
    - **非行内公式**（`formula_latex` 字段）：必须用 `$$...$$` 包裹
    - **行内公式**（`description` 字段内）：必须用 `$\\displaystyle{...}$` 包裹
 10. **输出格式**：输出格式必须为严格的 JSON 数组，每个元素代表一个步骤
+11. 第0步用于展示完整的题目内容，包括给定条件和目标等。注意！不要包含任何的[hint]或者[note]内容。
 
 **输出格式（JSON）：**
 [
+  {{
+    "step_index": 0,
+    "title": [题目简要描述],
+    "description": [完整的题目描述，包含所有的条件和要求],
+    "formula_latex": "如果有公式，用LaTeX格式表示，否则为null"
+  }},
   {{
     "step_index": 1,
     "title": "步骤标题（如：识别题目类型）",

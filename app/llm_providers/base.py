@@ -1,7 +1,7 @@
 """LLM 客户端基类接口"""
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from app.models.schemas import SolutionStep, NarrationStep
+from app.models.schemas import SolutionStep, NarrationStep, VerificationResult
 
 
 class LLMClient(ABC):
@@ -45,6 +45,26 @@ class LLMClient(ABC):
         """
         pass
     
+    @abstractmethod
+    def verify(
+        self,
+        problem_text: str,
+        solution_steps: List[SolutionStep],
+        meta: Optional[Dict[str, Any]] = None
+    ) -> VerificationResult:
+        """
+        交叉验证解题步骤是否正确
+
+        Args:
+            problem_text: 题目文本
+            solution_steps: 待验证的解题步骤
+            meta: 元数据
+
+        Returns:
+            VerificationResult
+        """
+        pass
+
     @abstractmethod
     def get_provider_name(self) -> str:
         """返回提供商名称"""

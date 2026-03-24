@@ -11,6 +11,8 @@ from app.models.schemas import (
     ProblemInput,
     SolutionResponse,
     NarrationResponse,
+    ManimPipelineRequest,
+    ManimPipelineResponse,
 )
 from app.llm_providers.factory import create_llm_client
 from app.llm_providers.base import LLMClient
@@ -126,6 +128,31 @@ def align_narration_to_solution(
     return aligned
 
 
+def _clean_narration_text(text: str) -> str:
+    """
+    Sanitize narration text: if the text looks like a JSON array/object leaked from
+    the LLM, try to extract narration_text values from it.
+    """
+    stripped = text.strip()
+    if not (stripped.startswith('[') or stripped.startswith('{')):
+        return text
+    try:
+        import json as _json
+        data = _json.loads(stripped)
+        if isinstance(data, list):
+            parts = []
+            for item in data:
+                if isinstance(item, dict) and 'narration_text' in item:
+                    parts.append(item['narration_text'])
+            if parts:
+                return '\n\n'.join(parts)
+        if isinstance(data, dict) and 'narration_text' in data:
+            return data['narration_text']
+    except Exception:
+        pass
+    return text
+
+
 def save_narration_txt(
     timestamp: str,
     solution_steps: List,
@@ -160,7 +187,7 @@ def save_narration_txt(
         lines.append(f"【步骤 {step_idx}】{title}")
         lines.append("")
         if step_idx in aligned_narration:
-            lines.append(aligned_narration[step_idx])
+            lines.append(_clean_narration_text(aligned_narration[step_idx]))
         lines.append("")
         lines.append("-" * 80)
         lines.append("")
@@ -356,13 +383,13 @@ async def download_narration(timestamp: str):
         import re
         if not re.match(r'^\d{8}_\d{6}$', timestamp):
             raise HTTPException(status_code=400, detail="无效的时间戳格式")
-        
+
         filename = f"problems/problem_{timestamp}_narration.txt"
         filepath = Path(filename)
-        
+
         if not filepath.exists():
             raise HTTPException(status_code=404, detail="讲解脚本文件不存在")
-        
+
         return FileResponse(
             path=str(filepath),
             media_type="text/plain; charset=utf-8",
@@ -375,6 +402,148 @@ async def download_narration(timestamp: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"下载讲解脚本失败: {str(e)}")
+
+
+@router.get("/download_video/{timestamp}")
+async def download_video(timestamp: str):
+    """下载 Manim 渲染视频"""
+    import re
+    if not re.match(r'^\d{8}_\d{6}$', timestamp):
+        raise HTTPException(status_code=400, detail="无效的时间戳格式")
+    filepath = Path(f"problems/problem_{timestamp}_solution.mp4")
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="视频文件不存在")
+    return FileResponse(
+        path=str(filepath),
+        media_type="video/mp4",
+        filename=f"solution_{timestamp}.mp4",
+        headers={"Content-Disposition": f"attachment; filename=solution_{timestamp}.mp4"}
+    )
+
+
+@router.get("/download_timing/{timestamp}")
+async def download_timing(timestamp: str):
+    """下载时序 JSON 文件"""
+    import re
+    if not re.match(r'^\d{8}_\d{6}$', timestamp):
+        raise HTTPException(status_code=400, detail="无效的时间戳格式")
+    filepath = Path(f"problems/problem_{timestamp}_timing.json")
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="时序文件不存在")
+    return FileResponse(
+        path=str(filepath),
+        media_type="application/json",
+        filename=f"timing_{timestamp}.json",
+        headers={"Content-Disposition": f"attachment; filename=timing_{timestamp}.json"}
+    )
+
+
+@router.post("/manim_pipeline", response_model=ManimPipelineResponse)
+async def manim_pipeline(
+    problem: ManimPipelineRequest,
+    llm_client: LLMClient = Depends(get_llm_client)
+):
+    """
+    完整 Manim 视频流水线：
+    1. LLM 解题
+    2. 交叉验证（最多重试 2 次）
+    3. 生成讲解脚本
+    4. 渲染 Manim 视频（每步时长由讲解词数决定）
+    5. 返回视频路径、讲解脚本路径、时序 JSON 路径及时序数据
+    """
+    from app.manim_scenes.renderer import compute_timings, render_solution_video
+
+    if not problem.text or not problem.text.strip():
+        raise HTTPException(status_code=400, detail="题目文本不能为空")
+    if len(problem.text) > 5000:
+        raise HTTPException(status_code=400, detail="题目文本过长（超过5000字符）")
+
+    cleaned_text = clean_problem_text(problem.text)
+    meta = {
+        "topic": problem.topic,
+        "difficulty": problem.difficulty,
+        "tags": problem.tags,
+    }
+
+    # ── 1. Solve ──────────────────────────────────────────────────────────────
+    try:
+        steps = llm_client.solve(cleaned_text, meta)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"解题失败: {e}")
+
+    if not steps:
+        raise HTTPException(status_code=500, detail="LLM 返回的解题步骤为空")
+
+    # ── 2. Verify (max 2 retries) ─────────────────────────────────────────────
+    MAX_RETRIES = 2
+    validation_attempts = 1
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            verification = llm_client.verify(cleaned_text, steps, meta)
+        except Exception:
+            # If verification itself fails, proceed with current solution
+            break
+        if verification.is_correct:
+            break
+        if attempt < MAX_RETRIES:
+            # Re-solve
+            validation_attempts += 1
+            try:
+                steps = llm_client.solve(cleaned_text, meta)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"重新解题失败: {e}")
+            if not steps:
+                raise HTTPException(status_code=500, detail="重新解题结果为空")
+
+    # ── 3. Narrate ────────────────────────────────────────────────────────────
+    try:
+        narration_steps = llm_client.narrate(cleaned_text, steps, meta)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成讲解失败: {e}")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    narration_txt_path = save_narration_txt(timestamp, steps, narration_steps)
+    aligned = align_narration_to_solution(steps, narration_steps)
+
+    # Save solution JSON for inspection
+    os.makedirs("problems", exist_ok=True)
+    solution_json_path = f"problems/problem_{timestamp}_solution.json"
+    with open(solution_json_path, "w", encoding="utf-8") as _f:
+        json.dump({
+            "timestamp": timestamp,
+            "problem_text": cleaned_text,
+            "meta": meta,
+            "validation_attempts": validation_attempts,
+            "solution_steps": [s.dict() for s in steps],
+            "narration_steps": [s.dict() for s in narration_steps],
+        }, _f, ensure_ascii=False, indent=2)
+
+    # ── 4. Compute timings ────────────────────────────────────────────────────
+    timings = compute_timings(
+        solution_steps=steps,
+        aligned_narration=aligned,
+        words_per_second=problem.words_per_second,
+    )
+
+    # ── 5. Render video ───────────────────────────────────────────────────────
+    try:
+        video_path, timing_json_path = render_solution_video(
+            timestamp=timestamp,
+            solution_steps=steps,
+            timings=timings,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Manim 渲染失败: {e}")
+
+    return ManimPipelineResponse(
+        problem_text=cleaned_text,
+        steps=steps,
+        narration_txt_path=narration_txt_path,
+        video_path=video_path,
+        timing_json_path=timing_json_path,
+        timing=timings,
+        validation_attempts=validation_attempts,
+    )
 
 
 def save_problem_record(
